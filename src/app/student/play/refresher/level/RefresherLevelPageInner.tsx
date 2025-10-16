@@ -139,28 +139,33 @@ export default function RefresherLevelPage() {
     }
   };
 
-  // ✅ Save stars (preserve 3 stars once achieved)
+// ✅ Save stars (preserve 3 stars once achieved)
 const saveProgress = async () => {
   const total = questions.length;
   const correctRate = (score / total) * 100;
   let stars = 0;
 
+  // ⭐ Proper star calculation
   if (correctRate >= 90) stars = 3;
   else if (correctRate >= 70) stars = 2;
   else if (correctRate >= 50) stars = 1;
+  else stars = 0; // ensure 0 if failed badly
 
   try {
     // 1️⃣ Fetch existing progress for this student + level
     const existingRes = await fetch(
       `/api/gamemode1/progress?student_id=${user.id_number}&level_id=${levelId}`
     );
+
     let existingStars = 0;
 
     if (existingRes.ok) {
       const existingData = await existingRes.json();
+
+      // Handle if API returns single object or array
       if (Array.isArray(existingData) && existingData.length > 0) {
-        existingStars = existingData[0].stars;
-      } else if (existingData?.stars) {
+        existingStars = existingData[0]?.stars ?? 0;
+      } else if (existingData?.stars !== undefined) {
         existingStars = existingData.stars;
       }
     }
@@ -169,8 +174,12 @@ const saveProgress = async () => {
     if (existingStars === 3) {
       stars = 3;
     }
+    // 3️⃣ Prevent downgrade (only improve stars if higher)
+    else if (stars < existingStars) {
+      stars = existingStars;
+    }
 
-    // 3️⃣ Save or update progress
+    // 4️⃣ Save or update progress
     const res = await fetch("/api/gamemode1/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -183,6 +192,7 @@ const saveProgress = async () => {
 
     if (!res.ok) throw new Error("Failed to save progress");
 
+    // 5️⃣ Show feedback
     Swal.fire({
       title: "Level Complete!",
       html: `
@@ -207,6 +217,7 @@ const saveProgress = async () => {
     router.push("/student/play/refresher");
   }
 };
+
 
   if (loading)
     return (
