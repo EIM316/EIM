@@ -130,7 +130,7 @@ export default function PlayPage() {
 
           {/* Quiz Mode */}
           <div
-            onClick={() => router.push("/on-going")}
+            onClick={() => router.push("/student/play/quizmode")}
             className="border-2 border-black rounded-lg p-4 text-center shadow-md w-[90%] hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
           >
             <h3 className="text-lg font-bold text-[#7b2020] mb-1">QUIZ MODE</h3>

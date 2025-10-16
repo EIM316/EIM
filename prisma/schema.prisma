@@ -19,9 +19,8 @@ model Student {
   avatar          String?             @db.VarChar(255)
   created_at      DateTime            @default(now()) @db.Timestamp(6)
 
-  // Relations
   student_classes StudentClass[]
-  progress        Gamemode1Progress[] // ✅ Link student progress
+  progress        Gamemode1Progress[]
 
   @@map("student")
   @@schema("eim")
@@ -95,10 +94,11 @@ model Admin {
   avatar      String?   @default("/resources/icons/admin.png") @db.VarChar(255)
   role        String    @default("content_admin") @db.VarChar(20)
   created_at  DateTime  @default(now()) @db.Timestamp(6)
-  updated_at  DateTime  @default(now()) @db.Timestamp(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(6)
 
   levels      Gamemode1Level[]
   music       GamemodeMusic[]
+  settings2   Gamemode2Settings[] // ✅ link to gamemode2 settings
 
   @@map("admin")
   @@schema("eim")
@@ -113,7 +113,7 @@ model Gamemode1Level {
 
   admin        Admin             @relation(fields: [admin_id], references: [admin_id])
   questions    Gamemode1[]
-  progress     Gamemode1Progress[] // ✅ Each level has progress records
+  progress     Gamemode1Progress[]
 
   @@map("gamemode1_levels")
   @@schema("eim")
@@ -137,6 +137,7 @@ model Gamemode1 {
   updated_at       DateTime         @default(now()) @updatedAt
 
   level            Gamemode1Level?  @relation(fields: [level_id], references: [id])
+  gamemode2_entries Gamemode2[]     @relation("Gamemode1_Gamemode2")
 
   @@map("gamemode1")
   @@schema("eim")
@@ -169,5 +170,48 @@ model Gamemode1Progress {
 
   @@unique([student_id, level_id])
   @@map("gamemode1_progress")
+  @@schema("eim")
+}
+
+model Gamemode2 {
+  id               Int       @id @default(autoincrement())
+  base_question_id Int?
+  question         String
+  option_a         String
+  option_b         String
+  option_c         String
+  option_d         String
+  answer           String     @db.Char(1)
+  question_image   String?    @db.Text
+  option_a_image   String?    @db.Text
+  option_b_image   String?    @db.Text
+  option_c_image   String?    @db.Text
+  option_d_image   String?    @db.Text
+  created_at       DateTime   @default(now()) @db.Timestamp(6)
+  updated_at       DateTime   @default(now()) @updatedAt @db.Timestamp(6)
+
+  base_question    Gamemode1? @relation("Gamemode1_Gamemode2", fields: [base_question_id], references: [id])
+
+  @@map("gamemode2")
+  @@schema("eim")
+}
+
+model Gamemode2Settings {
+  id                Int       @id @default(autoincrement())
+  admin_id          String    @db.VarChar(50)
+  total_minutes     Int       @default(5)
+  total_points      Int       @default(100)
+  hints_per_student Int       @default(3)
+  time_per_question Int       @default(15)
+  shuffle_mode      Boolean   @default(false)
+  max_questions     Int       @default(10)
+  theme_name        String?   @db.VarChar(100)
+  theme_file        String?   @db.VarChar(255)
+  created_at        DateTime  @default(now()) @db.Timestamp(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  admin             Admin     @relation(fields: [admin_id], references: [admin_id])
+
+  @@map("gamemode2_settings")
   @@schema("eim")
 }
