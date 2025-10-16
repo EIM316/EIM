@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["eim", "public"]
+}
+
+model Student {
+  id              Int                 @id @default(autoincrement())
+  id_number       String              @unique @db.VarChar(50)
+  first_name      String              @db.VarChar(100)
+  last_name       String              @db.VarChar(100)
+  email           String              @unique @db.VarChar(150)
+  password        String              @db.VarChar(255)
+  avatar          String?             @db.VarChar(255)
+  created_at      DateTime            @default(now()) @db.Timestamp(6)
+
+  // Relations
+  student_classes StudentClass[]
+  progress        Gamemode1Progress[] // ✅ Link student progress
+
+  @@map("student")
+  @@schema("eim")
+}
+
+model Teacher {
+  id          Int       @id @default(autoincrement())
+  id_number   String    @unique @db.VarChar(50)
+  first_name  String    @db.VarChar(100)
+  last_name   String    @db.VarChar(100)
+  email       String    @unique @db.VarChar(150)
+  password    String    @db.VarChar(255)
+  avatar      String?   @db.VarChar(255)
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+
+  classes     Class[]   @relation("TeacherClasses")
+
+  @@map("teacher")
+  @@schema("eim")
+}
+
+model ForgotPasswordCode {
+  id                Int      @id @default(autoincrement())
+  id_number         String   @db.VarChar(50)
+  email             String   @db.VarChar(255)
+  verification_code String   @db.Char(6)
+  expires_at        DateTime
+  created_at        DateTime @default(now())
+
+  @@map("forgot_password_codes")
+  @@schema("eim")
+}
+
+model Class {
+  id              Int             @id @default(autoincrement())
+  teacher_id      String          @db.VarChar(50)
+  class_name      String          @db.VarChar(100)
+  class_code      String          @unique @db.VarChar(10)
+  student_count   Int             @default(0)
+  created_at      DateTime        @default(now()) @db.Timestamp(6)
+  updated_at      DateTime        @default(now()) @db.Timestamp(6)
+
+  teacher         Teacher         @relation("TeacherClasses", fields: [teacher_id], references: [id_number])
+  student_classes StudentClass[]
+
+  @@map("class")
+  @@schema("eim")
+}
+
+model StudentClass {
+  id          Int       @id @default(autoincrement())
+  student_id  String    @db.VarChar(50)
+  class_id    Int
+  joined_at   DateTime  @default(now()) @db.Timestamp(6)
+
+  student     Student   @relation(fields: [student_id], references: [id_number])
+  class       Class     @relation(fields: [class_id], references: [id])
+
+  @@unique([student_id, class_id])
+  @@map("student_class")
+  @@schema("eim")
+}
+
+model Admin {
+  id          Int       @id @default(autoincrement())
+  admin_id    String    @unique @db.VarChar(50)
+  first_name  String    @db.VarChar(100)
+  last_name   String    @db.VarChar(100)
+  email       String    @unique @db.VarChar(150)
+  password    String    @db.VarChar(255)
+  avatar      String?   @default("/resources/icons/admin.png") @db.VarChar(255)
+  role        String    @default("content_admin") @db.VarChar(20)
+  created_at  DateTime  @default(now()) @db.Timestamp(6)
+  updated_at  DateTime  @default(now()) @db.Timestamp(6)
+
+  levels      Gamemode1Level[]
+  music       GamemodeMusic[]
+
+  @@map("admin")
+  @@schema("eim")
+}
+
+model Gamemode1Level {
+  id           Int               @id @default(autoincrement())
+  level_number Int               @unique
+  admin_id     String
+  created_at   DateTime          @default(now()) @db.Timestamp(6)
+  updated_at   DateTime          @default(now()) @updatedAt @db.Timestamp(6)
+
+  admin        Admin             @relation(fields: [admin_id], references: [admin_id])
+  questions    Gamemode1[]
+  progress     Gamemode1Progress[] // ✅ Each level has progress records
+
+  @@map("gamemode1_levels")
+  @@schema("eim")
+}
+
+model Gamemode1 {
+  id               Int              @id @default(autoincrement())
+  level_id         Int?
+  question         String
+  option_a         String
+  option_b         String
+  option_c         String
+  option_d         String
+  answer           String           @db.Char(1)
+  question_image   String?          @db.Text
+  option_a_image   String?          @db.Text
+  option_b_image   String?          @db.Text
+  option_c_image   String?          @db.Text
+  option_d_image   String?          @db.Text
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @default(now()) @updatedAt
+
+  level            Gamemode1Level?  @relation(fields: [level_id], references: [id])
+
+  @@map("gamemode1")
+  @@schema("eim")
+}
+
+model GamemodeMusic {
+  id           Int       @id @default(autoincrement())
+  gamemode     String    @default("gamemode1") @db.VarChar(50)
+  theme_name   String    @db.VarChar(100)
+  theme_file   String    @db.VarChar(255)
+  admin_id     String    @db.VarChar(50)
+  created_at   DateTime  @default(now()) @db.Timestamp(6)
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  admin        Admin     @relation(fields: [admin_id], references: [admin_id])
+
+  @@map("gamemode_music")
+  @@schema("eim")
+}
+
+model Gamemode1Progress {
+  id           Int              @id @default(autoincrement())
+  student_id   String           @db.VarChar(50)
+  level_id     Int
+  stars        Int              @default(0)
+  completed_at DateTime         @default(now()) @db.Timestamp(6)
+
+  student      Student          @relation(fields: [student_id], references: [id_number])
+  level        Gamemode1Level   @relation(fields: [level_id], references: [id])
+
+  @@unique([student_id, level_id])
+  @@map("gamemode1_progress")
+  @@schema("eim")
+}
