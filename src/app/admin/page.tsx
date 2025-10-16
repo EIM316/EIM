@@ -15,7 +15,7 @@ export default function AdminPage() {
     modules: 3,
     classMode: 1,
     classes: 1,
-    gameMode: 1,
+    gameMode: 4,
   });
 
   // ✅ Load admin user

@@ -443,7 +443,7 @@ const handleSaveTheme = async () => {
 
         <div className="grid grid-cols-2 gap-4">
           <label className="flex flex-col">
-            <span>Total Duration (minutes)</span>
+            <span>Duration (mins)</span>
             <input
               type="number"
               min={1}
@@ -451,7 +451,7 @@ const handleSaveTheme = async () => {
               onChange={(e) =>
                 setConfig({ ...config, total_minutes: +e.target.value })
               }
-              className="border rounded-md px-3 py-2"
+              className="border rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-[#548E28]/30 transition-al"
             />
           </label>
 
@@ -464,12 +464,12 @@ const handleSaveTheme = async () => {
               onChange={(e) =>
                 setConfig({ ...config, total_points: +e.target.value })
               }
-              className="border rounded-md px-3 py-2"
+              className="border rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-[#548E28]/30 transition-al"
             />
           </label>
 
           <label className="flex flex-col">
-            <span>Hints per Student</span>
+            <span>Hints</span>
             <input
               type="number"
               min={0}
@@ -477,12 +477,12 @@ const handleSaveTheme = async () => {
               onChange={(e) =>
                 setConfig({ ...config, hints_per_student: +e.target.value })
               }
-              className="border rounded-md px-3 py-2"
+              className="border rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-[#548E28]/30 transition-al"
             />
           </label>
 
           <label className="flex flex-col">
-            <span>Time per Question (seconds)</span>
+            <span>Time per (seconds)</span>
             <input
               type="number"
               min={5}
@@ -490,12 +490,13 @@ const handleSaveTheme = async () => {
               onChange={(e) =>
                 setConfig({ ...config, time_per_question: +e.target.value })
               }
-              className="border rounded-md px-3 py-2"
+              className="border rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-[#548E28]/30 transition-all"
+
             />
           </label>
 
           <label className="flex flex-col">
-            <span>Max Questions per Session</span>
+            <span>Max Questions</span>
             <input
               type="number"
               min={1}
@@ -507,7 +508,7 @@ const handleSaveTheme = async () => {
                   max_questions: Math.min(+e.target.value, questions.length),
                 })
               }
-              className="border rounded-md px-3 py-2"
+              className="border rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-[#548E28]/30 transition-all"
             />
           </label>
 
@@ -526,18 +527,20 @@ const handleSaveTheme = async () => {
 <div className="flex flex-wrap justify-between items-center mt-6 gap-3">
   <button
     onClick={handleSaveSettings}
-    className="bg-[#548E28] text-white px-6 py-2 rounded-md hover:bg-[#3e6a20] w-full sm:w-auto"
+    className="bg-[#548E28] text-white px-6 py-3 rounded-md hover:bg-[#3e6a20] w-full sm:w-auto flex items-center justify-center"
   >
     Save Settings
   </button>
 
   <button
     onClick={() => setShowMusicModal(true)}
-    className="flex items-center gap-2 bg-[#548E28] text-white px-4 py-2 rounded-md hover:bg-[#3e6a20] w-full sm:w-auto"
+    className="flex items-center justify-center gap-2 bg-[#548E28] text-white px-6 py-3 rounded-md hover:bg-[#3e6a20] w-full sm:w-auto"
   >
-    <Music className="w-5 h-5" /> Select Music Theme
+    <Music className="w-5 h-5" />
+    <span className="text-center">Select Music Theme</span>
   </button>
 </div>
+
 
       </div>
 
@@ -550,12 +553,16 @@ const handleSaveTheme = async () => {
     <h2 className="text-lg font-semibold text-[#548E28]">
       📜 Question List ({questions.length})
     </h2>
-    <button
-      onClick={() => openModal()}
-      className="bg-[#548E28] text-white px-4 py-2 rounded-md hover:bg-[#3e6a20]"
-    >
-      <Plus className="inline w-4 h-4 mr-1" /> Add Question
-    </button>
+    <div className="flex justify-end pr-4 sm:pr-6">
+  <button
+    onClick={() => openModal()}
+    className="bg-[#548E28] text-white px-4 py-2 rounded-md hover:bg-[#3e6a20] flex items-center justify-center"
+  >
+    <Plus className="inline w-4 h-4 mr-1" />
+
+  </button>
+</div>
+
   </div>
 
   <div

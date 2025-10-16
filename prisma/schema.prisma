@@ -98,7 +98,10 @@ model Admin {
 
   levels      Gamemode1Level[]
   music       GamemodeMusic[]
-  settings2   Gamemode2Settings[] // ✅ link to gamemode2 settings
+  settings2   Gamemode2Settings[]
+
+  gamemode3_options Gamemode3OptionBank[]
+  gamemode3_sets    Gamemode3Set[]
 
   @@map("admin")
   @@schema("eim")
@@ -213,5 +216,35 @@ model Gamemode2Settings {
   admin             Admin     @relation(fields: [admin_id], references: [admin_id])
 
   @@map("gamemode2_settings")
+  @@schema("eim")
+}
+
+model Gamemode3OptionBank {
+  id          Int       @id @default(autoincrement())
+  admin_id    String    @db.VarChar(50)
+  option_name String    @db.VarChar(255)
+  image_url   String    @db.Text
+  created_at  DateTime  @default(now()) @db.Timestamp(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  admin       Admin     @relation(fields: [admin_id], references: [admin_id])
+
+  @@map("gamemode3")      // ✅ your actual table name
+  @@schema("eim")
+}
+
+model Gamemode3Set {
+  id              Int       @id @default(autoincrement())
+  admin_id        String    @db.VarChar(50)
+  set_name        String    @db.VarChar(255)
+  image_url       String?   @db.Text
+  rect_data       Json?
+  correct_answers Json?
+  created_at      DateTime  @default(now()) @db.Timestamp(6)
+  updated_at      DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  admin           Admin     @relation(fields: [admin_id], references: [admin_id])
+
+  @@map("gamemode3_sets")  // ✅ confirmed correct
   @@schema("eim")
 }
