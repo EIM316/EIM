@@ -139,47 +139,43 @@ export default function RefresherLevelPage() {
     }
   };
 
-// ✅ Save stars (preserve 3 stars once achieved)
+// ✅ Save stars (preserve 3 stars once achieved; unlock next level only if 3 stars)
 const saveProgress = async () => {
   const total = questions.length;
   const correctRate = (score / total) * 100;
   let stars = 0;
 
-  // ⭐ Proper star calculation
+  // ⭐ Calculate earned stars
   if (correctRate >= 90) stars = 3;
   else if (correctRate >= 70) stars = 2;
   else if (correctRate >= 50) stars = 1;
-  else stars = 0; // ensure 0 if failed badly
+  else stars = 0;
 
   try {
-    // 1️⃣ Fetch existing progress for this student + level
+    // 1️⃣ Fetch existing progress
     const existingRes = await fetch(
       `/api/gamemode1/progress?student_id=${user.id_number}&level_id=${levelId}`
     );
 
     let existingStars = 0;
-
     if (existingRes.ok) {
-      const existingData = await existingRes.json();
-
-      // Handle if API returns single object or array
-      if (Array.isArray(existingData) && existingData.length > 0) {
-        existingStars = existingData[0]?.stars ?? 0;
-      } else if (existingData?.stars !== undefined) {
-        existingStars = existingData.stars;
+      const data = await existingRes.json();
+      if (Array.isArray(data) && data.length > 0) {
+        existingStars = data[0]?.stars ?? 0;
+      } else if (data?.stars !== undefined) {
+        existingStars = data.stars;
       }
     }
 
-    // 2️⃣ Preserve 3 stars if already earned
-    if (existingStars === 3) {
-      stars = 3;
-    }
-    // 3️⃣ Prevent downgrade (only improve stars if higher)
-    else if (stars < existingStars) {
+    // 2️⃣ Preserve highest stars ever achieved
+    if (stars < existingStars) {
       stars = existingStars;
     }
 
-    // 4️⃣ Save or update progress
+    // ✅ Only unlock next level if current earned 3 stars
+    const unlockNextLevel = stars === 3;
+
+    // 3️⃣ Save or update progress in DB
     const res = await fetch("/api/gamemode1/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -187,14 +183,15 @@ const saveProgress = async () => {
         student_id: user.id_number,
         level_id: Number(levelId),
         stars,
+        unlockNext: unlockNextLevel, // ← only true if 3 stars achieved
       }),
     });
 
     if (!res.ok) throw new Error("Failed to save progress");
 
-    // 5️⃣ Show feedback
+    // 4️⃣ Display score summary
     Swal.fire({
-      title: "Level Complete!",
+      title: unlockNextLevel ? "Level Cleared! 🎉" : "Level Complete!",
       html: `
         <div style="font-size:18px; margin-bottom:10px;">
           You got <b>${score}</b> out of <b>${total}</b> correct!
@@ -202,6 +199,11 @@ const saveProgress = async () => {
         <div style="font-size:22px; color:#FFD700;">
           ${"⭐".repeat(stars)}${"☆".repeat(3 - stars)}
         </div>
+        ${
+          unlockNextLevel
+            ? `<p style="margin-top:10px; color:green;">Next level unlocked!</p>`
+            : `<p style="margin-top:10px; color:#b30000;">Earn 3 stars to unlock the next level.</p>`
+        }
       `,
       icon: "success",
       confirmButtonText: "Back to Levels",

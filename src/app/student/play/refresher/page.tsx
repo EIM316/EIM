@@ -27,7 +27,7 @@ export default function RefresherModePage() {
   const [progress, setProgress] = useState<Progress[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Load student and progress
+  // ✅ Load student data and progress
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const savedType = localStorage.getItem("userType");
@@ -39,7 +39,6 @@ export default function RefresherModePage() {
 
     const parsedUser = JSON.parse(savedUser);
     setUser(parsedUser);
-
     fetchLevels();
     fetchProgress(parsedUser.id_number);
   }, [router]);
@@ -67,7 +66,6 @@ export default function RefresherModePage() {
       if (!res.ok) throw new Error("Failed to load progress");
       const data = await res.json();
 
-      // Ensure array structure
       setProgress(Array.isArray(data) ? data : data.progress || []);
     } catch (error) {
       console.error("Error fetching progress:", error);
@@ -75,35 +73,30 @@ export default function RefresherModePage() {
     }
   };
 
-  // ✅ Determine if level is unlocked
+  // ✅ Determine if level is unlocked (previous level must have 3 stars)
   const isUnlocked = (levelNumber: number) => {
-    if (levelNumber === 1) return true; // Level 1 is always unlocked
+    if (levelNumber === 1) return true; // First level always unlocked
 
-    // Get list of completed level numbers
-    const completedLevels = progress.map((p) => p.level_id);
-
-    // Unlock if the previous level is in progress (completed)
-    return completedLevels.includes(levelNumber - 1);
+    const prevLevel = progress.find((p) => p.level_id === levelNumber - 1);
+    return !!(prevLevel && prevLevel.stars === 3);
   };
 
-  // ✅ Handle level click
+  // ✅ Handle clicking on a level
   const handleLevelClick = (level: Level) => {
     if (!isUnlocked(level.level_number)) {
       Swal.fire(
         "Locked!",
-        "You need to finish the previous level to unlock this one.",
+        "You need to earn 3 stars in the previous level to unlock this one.",
         "info"
       );
       return;
     }
-
     router.push(`/student/play/refresher/level?id=${level.id}`);
   };
 
-  // ✅ Render stars display
+  // ✅ Render star icons for each level
   const renderStars = (levelNumber: number) => {
-    const stars =
-      progress.find((p) => p.level_id === levelNumber)?.stars || 0;
+    const stars = progress.find((p) => p.level_id === levelNumber)?.stars || 0;
     return (
       <div className="flex justify-center gap-1 mt-2">
         {[1, 2, 3].map((i) => (
@@ -118,7 +111,7 @@ export default function RefresherModePage() {
     );
   };
 
-  // ✅ Logout
+  // ✅ Logout confirmation
   const handleLogout = () => {
     Swal.fire({
       title: "Logout?",
@@ -170,7 +163,7 @@ export default function RefresherModePage() {
         />
       </header>
 
-      {/* ✅ Level Grid */}
+      {/* ✅ Levels Grid */}
       <main className="flex flex-col items-center w-full px-4">
         <h2 className="text-2xl font-bold text-[#7b2020] mb-6">
           🎯 Refresher Levels
@@ -185,8 +178,7 @@ export default function RefresherModePage() {
             {levels.map((level) => {
               const unlocked = isUnlocked(level.level_number);
               const stars =
-                progress.find((p) => p.level_id === level.level_number)?.stars ||
-                0;
+                progress.find((p) => p.level_id === level.level_number)?.stars || 0;
 
               return (
                 <div
@@ -223,7 +215,7 @@ export default function RefresherModePage() {
                   {/* ⭐ Stars */}
                   {renderStars(level.level_number)}
 
-                  {/* ✅ Label for completed levels */}
+                  {/* ✅ "Done" Label */}
                   {stars > 0 && (
                     <span className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded-md flex items-center gap-1">
                       <CheckCircle className="w-3 h-3" /> Done
