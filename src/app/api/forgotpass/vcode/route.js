@@ -15,15 +15,23 @@ export async function POST(req) {
       );
     }
 
-    // 🔍 Check both student and teacher tables
+    // 🔍 Check across Student, Teacher, and Admin tables
     const student = await prisma.student.findUnique({ where: { id_number } });
     const teacher = await prisma.teacher.findUnique({ where: { id_number } });
+    const admin = await prisma.admin.findUnique({ where: { admin_id: id_number } });
 
     let matchedUser = null;
+    let userType = null;
+
     if (student && student.email === email) {
       matchedUser = student;
+      userType = "student";
     } else if (teacher && teacher.email === email) {
       matchedUser = teacher;
+      userType = "teacher";
+    } else if (admin && admin.email === email) {
+      matchedUser = admin;
+      userType = "admin";
     }
 
     if (!matchedUser) {
@@ -35,7 +43,7 @@ export async function POST(req) {
       );
     }
 
-    // 🕒 Cooldown check (1 minute)
+    // 🕒 Cooldown check (1 minute between requests)
     const lastCode = await prisma.forgotPasswordCode.findFirst({
       where: { id_number, email },
       orderBy: { created_at: "desc" },
@@ -56,42 +64,54 @@ export async function POST(req) {
       }
     }
 
-    // 🔢 Generate 6-digit OTP
-    const verification_code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires_at = new Date(now.getTime() + 15 * 60 * 1000);
+    // 🔢 Generate a 6-digit OTP
+    const verification_code = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
+    const expires_at = new Date(now.getTime() + 15 * 60 * 1000); // 15 mins
 
+    // ✅ Save code in DB (auto-clean can happen in verify route)
     await prisma.forgotPasswordCode.create({
       data: { id_number, email, verification_code, expires_at },
     });
 
-    // 📧 Gmail transporter (App Password required)
+    // 📧 Setup Gmail SMTP Transporter
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS, // Use app password, not normal Gmail password
+        pass: process.env.EMAIL_PASS, // Gmail App Password
       },
     });
 
-    // Send email
+    // ✅ Send Email with Code
     await transporter.sendMail({
       from: `"EIM Support" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Your Password Reset Verification Code",
       html: `
         <div style="font-family: Arial, sans-serif; color: #333;">
-          <h2>Password Reset Code</h2>
+          <h2>Password Reset Verification</h2>
+          <p>Hello ${matchedUser.first_name},</p>
+          <p>We received a request to reset your EIM account password.</p>
           <p>Your verification code is:</p>
           <h1 style="color: #BC2A2A; letter-spacing: 5px;">${verification_code}</h1>
-          <p>This code will expire in 15 minutes.</p>
+          <p>This code will expire in <strong>15 minutes</strong>.</p>
+          <hr />
+          <p style="font-size: 12px; color: #777;">
+            If you didn’t request this, please ignore this email.
+          </p>
         </div>
       `,
     });
 
     return new Response(
-      JSON.stringify({ message: "Verification code sent successfully." }),
+      JSON.stringify({
+        message: "Verification code sent successfully.",
+        role: userType,
+      }),
       { status: 200 }
     );
   } catch (error) {

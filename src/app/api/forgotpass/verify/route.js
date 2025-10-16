@@ -14,7 +14,7 @@ export async function POST(req) {
       );
     }
 
-    // ✅ Check if the user exists in student or teacher tables
+    // ✅ Check if the account exists in any table
     const student = await prisma.student.findFirst({
       where: { id_number, email },
     });
@@ -23,7 +23,12 @@ export async function POST(req) {
       where: { id_number, email },
     });
 
-    if (!student && !teacher) {
+    const admin = await prisma.admin.findFirst({
+      where: { admin_id: id_number, email },
+    });
+
+    // ✅ No match found
+    if (!student && !teacher && !admin) {
       return new Response(
         JSON.stringify({
           error: "No account found with this ID and email.",
@@ -32,7 +37,17 @@ export async function POST(req) {
       );
     }
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    // ✅ Identify which role matched (optional but useful)
+    let role = student ? "student" : teacher ? "teacher" : "admin";
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        role,
+        message: `Account verified as ${role}.`,
+      }),
+      { status: 200 }
+    );
   } catch (error) {
     console.error("Forgot password verification error:", error);
     return new Response(
