@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Menu, LogOut, Search, X } from "lucide-react";
 import Swal from "sweetalert2";
 
-export default function PlayPage() {
+export default function GameTestPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -57,7 +57,7 @@ export default function PlayPage() {
       <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md relative mb-8">
         <div
           className="flex items-center space-x-3 cursor-pointer"
-          onClick={() => router.push("/student")}
+          onClick={() => router.push("/student/play")}
         >
           <Image
             src={user.avatar || "/student-avatar.png"}
@@ -107,61 +107,50 @@ export default function PlayPage() {
 
       {/* ✅ Main content */}
       <main className="flex flex-col items-center w-full px-4">
-        <h2 className="text-xl font-bold text-[#7b2020] mb-4">🎮 Choose Your Mode</h2>
+        <h2 className="text-xl font-bold text-[#7b2020] mb-4">
+          🧩 Choose Game Type
+        </h2>
 
-        {/* ✅ Responsive 2x2 grid layout with enforced perfect squares */}
-<div className="grid grid-cols-2 gap-4 w-full max-w-md">
-  {[
-    {
-      title: "REFRESHER",
-      desc: "AT YOUR OWN PACE",
-      img: "/resources/modes/refresher.png",
-      route: "/student/play/refresher",
-    },
-    {
-      title: "QUIZ MODE",
-      desc: "WITH TIMER",
-      img: "/resources/modes/quiz.png",
-      route: "/student/play/quizmode",
-    },
-    {
-      title: "CLASS MODE",
-      desc: "JOIN A CLASS",
-      img: "/resources/modes/class.png",
-      route: "/on-going",
-    },
-    {
-      title: "GAME TESTING",
-      desc: "TRY NEW GAMES",
-      img: "/resources/modes/betatest.jpg",
-      route: "/student/play/gametest",
-    },
-  ].map((mode, i) => (
-    <div
-      key={i}
-      onClick={() => router.push(mode.route)}
-      className="relative border-2 border-black rounded-lg shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer bg-white aspect-square flex flex-col justify-between items-center p-3 overflow-hidden"
-    >
-      <div className="text-center">
-        <h3 className="text-md font-bold text-[#7b2020] leading-tight">
-          {mode.title}
-        </h3>
-        <p className="text-gray-600 text-xs">{mode.desc}</p>
-      </div>
+        {/* ✅ Perfect Square Layout */}
+        <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+          {[
+            {
+              title: "SCHEMATIC BUILDER",
+              desc: "CREATE & SOLVE DIAGRAMS",
+              img: "/resources/modes/schematic.png",
+              route: "/student/play/gametest/1",
+            },
+            {
+              title: "PHASE RUSH",
+              desc: "FAST REACTION QUIZ",
+              img: "/resources/modes/phaserush.png",
+              route: "/student/play/gametest/2",
+            },
+          ].map((game, i) => (
+            <div
+              key={i}
+              onClick={() => router.push(game.route)}
+              className="relative border-2 border-black rounded-lg shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer bg-white aspect-square flex flex-col justify-between items-center p-3 overflow-hidden"
+            >
+              <div className="text-center">
+                <h3 className="text-md font-bold text-[#7b2020] leading-tight">
+                  {game.title}
+                </h3>
+                <p className="text-gray-600 text-xs">{game.desc}</p>
+              </div>
 
-      <div className="flex-1 flex items-center justify-center w-full">
-        <Image
-          src={mode.img}
-          alt={mode.title}
-          width={100}
-          height={100}
-          className="object-contain max-h-[70%]"
-        />
-      </div>
-    </div>
-  ))}
-</div>
-
+              <div className="flex-1 flex items-center justify-center w-full">
+                <Image
+                  src={game.img}
+                  alt={game.title}
+                  width={100}
+                  height={100}
+                  className="object-contain max-h-[70%]"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
     </div>
   );

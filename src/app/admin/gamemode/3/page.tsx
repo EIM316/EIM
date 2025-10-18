@@ -506,19 +506,33 @@ const handleDeleteOption = async (id: number) => {
     setSelectedBoxId(id);
   };
 
-  const handleTapPlaceBox = (e: React.PointerEvent) => {
-    // only place if selected box id
-    if (!selectedBoxId || !imageRef.current) return;
-    const rect = imageRef.current.getBoundingClientRect();
-    const w = 100, h = 35;
-    const x = e.clientX - rect.left - w / 2;
-    const y = e.clientY - rect.top - h / 2;
-    setRects((prev) => [
-      ...prev.filter((r) => r.id !== selectedBoxId),
-      { id: selectedBoxId, x: Math.max(0, x), y: Math.max(0, y), w, h, color: colors[selectedBoxId - 1] },
-    ]);
-    setSelectedBoxId(null);
-  };
+ const handleTapPlaceBox = (e: React.MouseEvent<HTMLDivElement>) => {
+  if (!selectedBoxId || !imageRef.current) return;
+
+  const rect = imageRef.current.getBoundingClientRect();
+  const size = 60; // fixed square size
+  const x = e.clientX - rect.left - size / 2;
+  const y = e.clientY - rect.top - size / 2;
+
+  // ✅ Keep square within boundaries
+  const limitedX = Math.max(0, Math.min(rect.width - size, x));
+  const limitedY = Math.max(0, Math.min(rect.height - size, y));
+
+  setRects((prev) => [
+    ...prev.filter((r) => r.id !== selectedBoxId),
+    {
+      id: selectedBoxId,
+      x: limitedX,
+      y: limitedY,
+      w: size,
+      h: size,
+      color: colors[selectedBoxId - 1],
+    },
+  ]);
+
+  setSelectedBoxId(null);
+};
+
 
   /* ---------- cleanup audio on unmount ---------- */
   useEffect(() => {
@@ -622,26 +636,58 @@ const handleDeleteOption = async (id: number) => {
             {/* image + rects */}
             <div className="border border-gray-300 p-4 rounded-lg mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <label htmlFor="mainUpload" className="text-sm font-semibold border border-gray-300 px-3 py-1 rounded bg-gray-50 cursor-pointer hover:bg-gray-100">SWITCH</label>
+                <label htmlFor="mainUpload" className="text-sm font-semibold border border-gray-300 px-3 py-1 rounded bg-gray-50 cursor-pointer hover:bg-gray-100">UPLOAD</label>
                 <input id="mainUpload" type="file" accept="image/*" className="hidden" onChange={handleMainImageUpload} />
-                <span className="text-xs text-gray-600">{previewFilename || "No image"}</span>
-                <div className="ml-auto text-xs text-gray-500">Tap a number then tap image to place (mobile)</div>
+                
+                <div className="ml-auto text-xs text-gray-500"></div>
               </div>
 
-              <div ref={imageRef} onPointerDown={handleTapPlaceBox} className="relative border border-gray-200 w-full h-[260px] sm:h-[300px] flex items-center justify-center overflow-hidden">
-                {preview ? (
-                  <>
-                    <img src={preview} alt="Preview" className="object-contain w-full h-full" />
-                    {rects.map((r) => (
-                      <div key={r.id} className="absolute text-xs sm:text-sm flex items-center justify-center font-bold text-white rounded-md" style={{ left: r.x, top: r.y, width: r.w, height: r.h, background: r.color, opacity: 0.9 }}>
-                        [RECT {r.id}]
-                      </div>
-                    ))}
-                  </>
-                ) : (
-                  <p className="text-gray-500 text-sm">SWITCH → UPLOAD to add image</p>
-                )}
-              </div>
+             <div
+  ref={imageRef}
+  onClick={handleTapPlaceBox}
+  className="relative border border-gray-200 w-full h-[260px] sm:h-[300px] flex items-center justify-center overflow-hidden bg-gray-50"
+  style={{ touchAction: "none" }}
+>
+  {preview ? (
+    <>
+      {/* ✅ Image */}
+      <img
+        src={preview}
+        alt="Preview"
+        className="object-contain w-full h-full pointer-events-none select-none"
+        draggable={false}
+      />
+
+      {/* ✅ Render Squares */}
+      {rects.map((r) => (
+        <div
+          key={r.id}
+          style={{
+            position: "absolute",
+            left: r.x,
+            top: r.y,
+            width: r.w - 20,
+            height: r.h - 20,
+            background: r.color,
+            borderRadius: 8,
+            opacity: 0.9,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            fontWeight: "bold",
+            fontSize: "14px",
+          }}
+        >
+          {r.id}
+        </div>
+      ))}
+    </>
+  ) : (
+    <p className="text-gray-500 text-sm">UPLOAD → to add image</p>
+  )}
+</div>
+
 
               {/* draggable numbers (tap in mobile) */}
               <div className="flex justify-center gap-2 mt-3">
