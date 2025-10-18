@@ -16,15 +16,25 @@ export default function SchematicBuilderGame() {
   const [searchTerm, setSearchTerm] = useState("");
   const [rects, setRects] = useState<Rect[]>([]);
   const [answers, setAnswers] = useState<OptionItem[]>([]);
-  const [placed, setPlaced] = useState<(OptionItem | null)[]>([null, null, null, null, null]);
+  const [shuffledAnswers, setShuffledAnswers] = useState<OptionItem[]>([]);
+  const [placed, setPlaced] = useState<(OptionItem | null)[]>([]);
   const [dragging, setDragging] = useState<OptionItem | null>(null);
   const [wrongAttempt, setWrongAttempt] = useState<OptionItem | null>(null);
   const [diagram, setDiagram] = useState<string | null>(null);
   const [setName, setSetName] = useState<string>("");
 
+  // All sets
+  const [sets, setSets] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [score, setScore] = useState(0);
+
+  // 🎵 Music
+  const [musicUrl, setMusicUrl] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const imageRef = useRef<HTMLDivElement | null>(null);
 
-  /* ---------- Load Auth and Fetch Set from Admin ---------- */
+  /* ---------- Load Auth ---------- */
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const savedType = localStorage.getItem("userType");
@@ -32,40 +42,115 @@ export default function SchematicBuilderGame() {
       router.push("/");
       return;
     }
+    setUser(JSON.parse(savedUser));
+  }, [router]);
 
-    const parsed = JSON.parse(savedUser);
-    setUser(parsed);
+  /* ---------- Utility: Fisher–Yates shuffle ---------- */
+  function shuffle<T>(arr: T[]): T[] {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  /* ---------- Fetch All Sets ---------- */
+  useEffect(() => {
+    if (!user) return;
 
     (async () => {
       try {
         const res = await fetch(`/api/gamemode3/set/list?admin_id=ADMIN-0001`);
-        const sets = await res.json();
-        if (!Array.isArray(sets) || sets.length === 0) {
+        const setsData = await res.json();
+        if (!Array.isArray(setsData) || setsData.length === 0) {
           Swal.fire("No sets found", "Ask admin to create schematic sets.", "info");
           return;
         }
 
-        const selectedSet = sets[0];
-        setSetName(selectedSet.set_name);
-
-        const detailRes = await fetch(`/api/gamemode3/set/get?id=${selectedSet.id}`);
-        const data = await detailRes.json();
-
-        setDiagram(data.image_url);
-        setRects(Array.isArray(data.rect_data) ? data.rect_data : JSON.parse(data.rect_data || "[]"));
-        setAnswers(
-          Array.isArray(data.correct_answers)
-            ? data.correct_answers
-            : JSON.parse(data.correct_answers || "[]")
-        );
+        // 🔀 Shuffle all sets
+        const shuffledSets = shuffle(setsData);
+        setSets(shuffledSets);
+        loadSet(shuffledSets[0]);
       } catch (err) {
-        console.error("Error fetching schematic set:", err);
-        Swal.fire("Error", "Failed to load schematic data", "error");
+        console.error("Error fetching sets:", err);
       }
     })();
-  }, [router]);
+  }, [user]);
 
-  /* ---------- Handle answer placement ---------- */
+  /* ---------- Load One Set ---------- */
+  const loadSet = async (setData: any) => {
+    try {
+      setSetName(setData.set_name);
+      const detailRes = await fetch(`/api/gamemode3/set/get?id=${setData.id}`);
+      const data = await detailRes.json();
+
+      setDiagram(data.image_url);
+
+      const parsedRects = Array.isArray(data.rect_data)
+        ? data.rect_data
+        : JSON.parse(data.rect_data || "[]");
+      setRects(parsedRects);
+
+      const parsedAnswers = Array.isArray(data.correct_answers)
+        ? data.correct_answers
+        : JSON.parse(data.correct_answers || "[]");
+
+      setAnswers(parsedAnswers.slice(0, 20));
+      setShuffledAnswers(shuffle(parsedAnswers.slice(0, 20)));
+      setPlaced(new Array(parsedRects.length || 20).fill(null));
+    } catch (err) {
+      console.error("Error loading set:", err);
+    }
+  };
+
+  /* ---------- Music Fetch ---------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/gamemode3/music/get");
+        if (!res.ok) return;
+        const data = await res.json();
+        setMusicUrl(data.file_url || data.music_url || data.theme_file || data.url || null);
+      } catch (err) {
+        console.error("Music error:", err);
+      }
+    })();
+  }, []);
+
+  /* ---------- Background Music ---------- */
+  useEffect(() => {
+    if (!musicUrl) return;
+    const audio = new Audio(musicUrl);
+    audio.loop = true;
+    audio.volume = 0.5;
+    audioRef.current = audio;
+
+    const playMusic = async () => {
+      try {
+        await audio.play();
+        window.removeEventListener("click", playMusic);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    window.addEventListener("click", playMusic);
+    return () => {
+      audio.pause();
+      audio.currentTime = 0;
+      window.removeEventListener("click", playMusic);
+    };
+  }, [musicUrl]);
+
+  const stopMusic = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  /* ---------- Handle Placement ---------- */
   const handlePlaceAnswer = (rectId: number) => {
     if (!dragging) return;
 
@@ -73,40 +158,57 @@ export default function SchematicBuilderGame() {
     if (!correctAnswer) return;
 
     if (dragging.id === correctAnswer.id) {
-      // ✅ Correct placement
       setPlaced((prev) => {
         const newPlaced = [...prev];
         newPlaced[rectId - 1] = dragging;
         return newPlaced;
       });
       setDragging(null);
-      checkSuccess();
     } else {
       // ❌ Wrong attempt
       setWrongAttempt(dragging);
       setDragging(null);
-
-      // shake for 1s and reset all
       setTimeout(() => {
-        setPlaced([null, null, null, null, null]);
+        setPlaced(new Array(answers.length).fill(null));
+        setShuffledAnswers(shuffle(answers)); // 🔀 reshuffle on wrong attempt
         setWrongAttempt(null);
       }, 1000);
     }
   };
 
-  /* ---------- Check if all correct ---------- */
-  const checkSuccess = () => {
-    const allCorrect = placed.every((p, i) => p && p.id === answers[i]?.id);
+  /* ---------- Watch for completion ---------- */
+  useEffect(() => {
+    if (placed.length === 0) return;
+    const allCorrect = rects.length > 0 && placed.every((p, i) => p && p.id === answers[i]?.id);
+
     if (allCorrect) {
+      stopMusic();
+      const newScore = score + 100;
+      setScore(newScore);
+
       Swal.fire({
         icon: "success",
         title: "✅ Set Completed!",
-        text: `You’ve successfully matched all components for "${setName}"!`,
+        html: `<b>+100 Points</b><br/>Total: ${newScore}`,
         confirmButtonColor: "#548E28",
+      }).then(() => {
+        if (currentIndex + 1 < sets.length) {
+          const next = currentIndex + 1;
+          setCurrentIndex(next);
+          loadSet(sets[next]); // 🔀 New set automatically reshuffles
+        } else {
+          Swal.fire({
+            icon: "info",
+            title: "🎉 All Sets Completed!",
+            text: `You earned a total of ${newScore} points!`,
+            confirmButtonColor: "#548E28",
+          }).then(() => router.push("/student/play/gametest"));
+        }
       });
     }
-  };
+  }, [placed]);
 
+  /* ---------- Render ---------- */
   if (!user)
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-700">
@@ -116,11 +218,14 @@ export default function SchematicBuilderGame() {
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-white relative">
-      {/* ✅ Header */}
+      {/* Header */}
       <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md relative mb-4">
         <div
           className="flex items-center space-x-3 cursor-pointer"
-          onClick={() => router.push("/student/play/gametest")}
+          onClick={() => {
+            stopMusic();
+            router.push("/student/play/gametest");
+          }}
         >
           <Image
             src={user.avatar || "/student-avatar.png"}
@@ -140,6 +245,7 @@ export default function SchematicBuilderGame() {
           <Menu className="w-7 h-7 cursor-pointer" />
           <LogOut
             onClick={() => {
+              stopMusic();
               localStorage.clear();
               router.push("/");
             }}
@@ -168,14 +274,14 @@ export default function SchematicBuilderGame() {
         )}
       </header>
 
-      {/* ✅ Game Area */}
+      {/* Main */}
       <main className="w-full max-w-lg flex flex-col items-center">
-        <h2 className="text-xl font-bold text-[#7b2020] mb-3">{setName || "Loading..."}</h2>
+        <h2 className="text-xl font-bold text-[#7b2020] mb-1">{setName || "Loading..."}</h2>
+        <p className="text-gray-600 mb-3">Score: {score}</p>
 
-        {/* Diagram Area */}
         <div
           ref={imageRef}
-          className={`relative border-2 border-gray-300 rounded-lg overflow-hidden w-full aspect-square flex items-center justify-center bg-gray-50`}
+          className="relative border-2 border-gray-300 rounded-lg overflow-hidden w-full aspect-square flex items-center justify-center bg-gray-50"
         >
           {diagram ? (
             <Image src={diagram} alt="Diagram" fill className="object-contain" />
@@ -183,7 +289,6 @@ export default function SchematicBuilderGame() {
             <p className="text-gray-500 text-sm">Loading diagram...</p>
           )}
 
-          {/* Drop Zones */}
           {rects.map((r, i) => (
             <div
               key={`rect-${r.id}-${i}`}
@@ -200,7 +305,7 @@ export default function SchematicBuilderGame() {
                 left: `${r.x}px`,
                 width: `${r.w}px`,
                 height: `${r.h}px`,
-                background: placed[r.id - 1] ? "#e5ffe5" : r.color + "99",
+                background: placed[r.id - 1] ? "#e5ffe5" : r.color,
               }}
             >
               {placed[r.id - 1] ? (
@@ -211,7 +316,6 @@ export default function SchematicBuilderGame() {
                   height={r.h - 10}
                   className="object-contain rounded-md"
                 />
-
               ) : (
                 <span className="text-white font-bold">{r.id}</span>
               )}
@@ -219,18 +323,14 @@ export default function SchematicBuilderGame() {
           ))}
         </div>
 
-        {/* ✅ Options List */}
+        {/* Shuffled Options */}
         <div className="flex justify-center gap-3 mt-5 flex-wrap">
-          {answers.map((a, i) => (
+          {shuffledAnswers.map((a, i) => (
             <div
               key={`answer-${a.id}-${i}`}
-              onClick={() => !placed.some((p) => p?.id === a.id) && setDragging(a)}
+              onClick={() => setDragging(a)}
               className={`w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center cursor-pointer border-2 transition-all ${
-                placed.some((p) => p?.id === a.id)
-                  ? "opacity-40 cursor-not-allowed"
-                  : dragging?.id === a.id
-                  ? "ring-4 ring-[#548E28] scale-110"
-                  : "hover:scale-105"
+                dragging?.id === a.id ? "ring-4 ring-[#548E28] scale-110" : "hover:scale-105"
               }`}
             >
               <Image
@@ -247,7 +347,7 @@ export default function SchematicBuilderGame() {
         </div>
       </main>
 
-      {/* ✅ Animations */}
+      {/* Animations */}
       <style jsx>{`
         @keyframes shake {
           0% {
