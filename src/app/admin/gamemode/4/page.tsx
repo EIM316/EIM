@@ -77,7 +77,7 @@ export default function GameMode4Page() {
     shuffle_mode: true,
   });
 
-  // ✅ Load Admin and Fetch Questions
+   // ✅ Load Admin + Fetch Questions + Settings + Theme
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const savedType = localStorage.getItem("userType");
@@ -87,10 +87,56 @@ export default function GameMode4Page() {
       return;
     }
 
-    setUser(JSON.parse(savedUser));
+    const parsedUser = JSON.parse(savedUser);
+    setUser(parsedUser);
     fetchQuestions();
-    fetchTheme();
+    fetchSettings(parsedUser.admin_id);
   }, [router]);
+
+   // ✅ Fetch GameMode4 Settings (NEW)
+  const fetchSettings = async (admin_id: string) => {
+    try {
+      const res = await fetch(`/api/gamemode4/settings/get?admin_id=${admin_id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setConfig({
+          total_game_time: data.total_game_time,
+          question_interval: data.question_interval,
+          shuffle_mode: data.shuffle_mode,
+        });
+        setSelectedTheme(data.theme_file || null);
+      }
+    } catch (error) {
+      console.warn("⚠️ No saved settings found for this admin");
+    }
+  };
+
+  // ✅ Save GameMode4 Settings (NEW)
+  const handleSaveSettings = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch("/api/gamemode4/settings/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          admin_id: user.admin_id,
+          total_game_time: config.total_game_time,
+          question_interval: config.question_interval,
+          shuffle_mode: config.shuffle_mode,
+          theme_name: selectedTheme
+            ? selectedTheme.split("/").pop()?.replace(".mp3", "")
+            : null,
+          theme_file: selectedTheme,
+        }),
+      });
+
+      if (!res.ok) throw new Error();
+      Swal.fire("Saved!", "Game Mode 4 settings have been updated.", "success");
+    } catch (error) {
+      Swal.fire("Error", "Failed to save settings.", "error");
+    }
+  };
+
 
   // ✅ Fetch All Questions
   const fetchQuestions = async () => {
@@ -159,24 +205,35 @@ export default function GameMode4Page() {
     setSelectedQuestion((prev) => (prev ? { ...prev, question_image: uploadedUrl } : prev));
   };
 
-  // ✅ Add/Edit Modal Controls
-  const openModal = (q?: Question) => {
-    setSelectedQuestion(
-      q || {
-        id: 0,
-        question: "",
-        option_a: "",
-        option_b: "",
-        option_c: "",
-        option_d: "",
-        answer: "A",
-        level_id: null,
-        question_image: null,
-      }
-    );
-    setEditMode(!!q);
-    setShowModal(true);
-  };
+ const openModal = (q?: Question) => {
+  // 🚫 Prevent editing non-GameMode 4 questions
+  if (q && q.mode !== "GameMode 4") {
+    Swal.fire({
+      title: "Notice",
+      text: `Update this question in ${q.mode} to proceed.`,
+      icon: "info",
+      confirmButtonText: "OK",
+    });
+    return; // stop here
+  }
+
+  setSelectedQuestion(
+    q || {
+      id: 0,
+      question: "",
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      answer: "A",
+      level_id: null,
+      question_image: null,
+    }
+  );
+  setEditMode(!!q);
+  setShowModal(true);
+};
+
 
   const closeModal = () => {
     setShowModal(false);
@@ -203,22 +260,33 @@ export default function GameMode4Page() {
     }
   };
 
-  // ✅ Delete Question
   const handleDelete = async (id: number) => {
-    const confirm = await Swal.fire({
-      title: "Delete Question?",
-      icon: "warning",
-      showCancelButton: true,
+  const target = questions.find((q) => q.id === id);
+  if (target && target.mode !== "GameMode 4") {
+    Swal.fire({
+      title: "Notice",
+      text: `You can only delete questions created in GameMode 4.`,
+      icon: "info",
+      confirmButtonText: "OK",
     });
-    if (!confirm.isConfirmed) return;
-    try {
-      await fetch(`/api/gamemode4/delete?id=${id}`, { method: "DELETE" });
-      await fetchQuestions();
-      Swal.fire("Deleted!", "Question removed.", "success");
-    } catch {
-      Swal.fire("Error", "Failed to delete question.", "error");
-    }
-  };
+    return; // ❌ prevent deletion
+  }
+
+  const confirm = await Swal.fire({
+    title: "Delete Question?",
+    icon: "warning",
+    showCancelButton: true,
+  });
+  if (!confirm.isConfirmed) return;
+
+  try {
+    await fetch(`/api/gamemode4/delete?id=${id}`, { method: "DELETE" });
+    await fetchQuestions();
+    Swal.fire("Deleted!", "Question removed.", "success");
+  } catch {
+    Swal.fire("Error", "Failed to delete question.", "error");
+  }
+};
 
   // ✅ Handle Music Preview
   const handlePreview = (file: string) => {
@@ -337,10 +405,9 @@ export default function GameMode4Page() {
         </label>
 
         <div className="flex justify-between mt-6 gap-3">
+          {/* ✅ Connect Save Settings here */}
           <button
-            onClick={() =>
-              Swal.fire("Saved!", "Game Mode 4 settings saved!", "success")
-            }
+            onClick={handleSaveSettings}
             className="bg-[#548E28] text-white px-6 py-3 rounded-md hover:bg-[#3e6a20]"
           >
             Save Settings

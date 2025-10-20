@@ -219,83 +219,120 @@ const handleSaveSettings = async () => {
   }
 };
 
+// ✅ Open Add/Edit Modal
+const openModal = (question?: Question) => {
+  // 🚫 Prevent editing questions from GameMode 1
+  if (question && question.mode !== "GameMode 2") {
+    Swal.fire({
+      title: "Notice",
+      text: "To update or remove this, please go to Game Mode 1.",
+      icon: "info",
+      confirmButtonText: "OK",
+    });
+    return; // stop opening modal
+  }
 
-  // ✅ Open Add/Edit Modal
-  const openModal = (question?: Question) => {
-    setSelectedQuestion(
-      question || {
-        id: 0,
-        question: "",
-        option_a: "",
-        option_b: "",
-        option_c: "",
-        option_d: "",
-        answer: "A",
-        level_id: null,
-        question_image: null,
-        option_a_image: null,
-        option_b_image: null,
-        option_c_image: null,
-        option_d_image: null,
-      }
-    );
-    setEditMode(!!question);
-    setShowModal(true);
-  };
+  setSelectedQuestion(
+    question || {
+      id: 0,
+      question: "",
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      answer: "A",
+      level_id: null,
+      question_image: null,
+      option_a_image: null,
+      option_b_image: null,
+      option_c_image: null,
+      option_d_image: null,
+      mode: "GameMode 2",
+    }
+  );
+  setEditMode(!!question);
+  setShowModal(true);
+};
+
 
   const closeModal = () => {
     setShowModal(false);
     setSelectedQuestion(null);
   };
 
-  // ✅ Save Question
-  const handleSaveQuestion = async () => {
-    if (!selectedQuestion) return;
+ // ✅ Save Question
+const handleSaveQuestion = async () => {
+  if (!selectedQuestion) return;
 
-    const url = editMode ? "/api/gamemode2/update" : "/api/gamemode2/add";
-    const method = editMode ? "PUT" : "POST";
-
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectedQuestion),
-      });
-
-      if (!res.ok) throw new Error("Failed to save question");
-      await fetchQuestions();
-      Swal.fire("Success", "Question saved successfully!", "success");
-      closeModal();
-    } catch (error) {
-      console.error(error);
-      Swal.fire("Error", "Failed to save question.", "error");
-    }
-  };
-
-  // ✅ Delete Question
-  const handleDelete = async (id: number) => {
-    const confirm = await Swal.fire({
-      title: "Delete Question?",
-      text: "This action cannot be undone.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#aaa",
-      confirmButtonText: "Yes, delete it",
+  // 🚫 Prevent saving/updating GameMode 1 questions
+  if (editMode && selectedQuestion.mode !== "GameMode 2") {
+    Swal.fire({
+      title: "Notice",
+      text: "To update this question, please go to Game Mode 1.",
+      icon: "info",
+      confirmButtonText: "OK",
     });
-    if (!confirm.isConfirmed) return;
+    closeModal();
+    return;
+  }
 
-    try {
-      const res = await fetch(`/api/gamemode2/delete?id=${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete");
-      await fetchQuestions();
-      Swal.fire("Deleted!", "Question removed.", "success");
-    } catch (err) {
-      Swal.fire("Error", "Could not delete question.", "error");
-    }
-  };
+  const url = editMode ? "/api/gamemode2/update" : "/api/gamemode2/add";
+  const method = editMode ? "PUT" : "POST";
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(selectedQuestion),
+    });
+
+    if (!res.ok) throw new Error("Failed to save question");
+    await fetchQuestions();
+    Swal.fire("Success", "Question saved successfully!", "success");
+    closeModal();
+  } catch (error) {
+    console.error(error);
+    Swal.fire("Error", "Failed to save question.", "error");
+  }
+};
+
+ // ✅ Delete Question
+const handleDelete = async (id: number) => {
+  const target = questions.find((q) => q.id === id);
+
+  // 🚫 Prevent deleting GameMode 1 questions
+  if (target && target.mode !== "GameMode 2") {
+    Swal.fire({
+      title: "Notice",
+      text: "To update or remove this, please go to Game Mode 1.",
+      icon: "info",
+      confirmButtonText: "OK",
+    });
+    return;
+  }
+
+  const confirm = await Swal.fire({
+    title: "Delete Question?",
+    text: "This action cannot be undone.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    cancelButtonColor: "#aaa",
+    confirmButtonText: "Yes, delete it",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  try {
+    const res = await fetch(`/api/gamemode2/delete?id=${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Failed to delete");
+    await fetchQuestions();
+    Swal.fire("Deleted!", "Question removed.", "success");
+  } catch (err) {
+    Swal.fire("Error", "Could not delete question.", "error");
+  }
+};
+
 
   // ✅ Play Preview
 const handlePreview = (file: string) => {
