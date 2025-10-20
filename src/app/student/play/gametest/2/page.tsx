@@ -37,17 +37,14 @@ export default function PhaseRush() {
     const u = JSON.parse(savedUser);
     setUser(u);
 
+    const charImg = "/resources/modes/engr.png";
+
     const tempPlayers: Player[] = [
-      {
-        name: u.first_name || "You",
-        color: "#7b2020",
-        height: 0,
-        image: "/player.png",
-      },
-      { name: "BOT A", color: "#1e88e5", height: 0, image: "/bot1.png" },
-      { name: "BOT B", color: "#43a047", height: 0, image: "/bot2.png" },
-      { name: "BOT C", color: "#f4511e", height: 0, image: "/bot3.png" },
-      { name: "BOT D", color: "#9c27b0", height: 0, image: "/bot4.png" },
+      { name: u.first_name || "You", color: "#7b2020", height: 0, image: charImg },
+      { name: "BOT A", color: "#1e88e5", height: 0, image: charImg },
+      { name: "BOT B", color: "#43a047", height: 0, image: charImg },
+      { name: "BOT C", color: "#f4511e", height: 0, image: charImg },
+      { name: "BOT D", color: "#9c27b0", height: 0, image: charImg },
     ];
     setPlayers(tempPlayers);
   }, [router]);
@@ -237,23 +234,31 @@ export default function PhaseRush() {
           <div className="flex justify-around items-end w-full h-[500px] bg-gray-100 rounded-lg border border-gray-300 overflow-hidden p-3 relative">
             {players.map((p, i) => (
               <div key={i} className="flex flex-col items-center h-full w-24 relative">
-                {/* Tower */}
-                <div className="flex flex-col-reverse items-center justify-start h-full">
-                  {/* Blocks */}
+                <div className="flex flex-col-reverse items-center justify-start h-full relative">
+                  {/* Tower Boxes */}
                   {Array.from({ length: p.height }).map((_, idx) => (
-                    <div
+                    <Image
                       key={idx}
-                      className="w-16 h-4 rounded-sm mb-[1px]"
-                      style={{ backgroundColor: p.color }}
+                      src="/resources/modes/boxes.png"
+                      alt="Tower Box"
+                      width={55}
+                      height={10}
+                      className="object-contain m-0 p-0"
                     />
                   ))}
-                  {/* Character */}
+
+                  {/* Character + Name */}
                   <div
-                    className="transition-all duration-500 ease-in-out"
+                    className="relative flex flex-col items-center transition-all duration-500 ease-in-out"
                     style={{
-                      transform: `translateY(-${p.height * 4}px)`,
+                      transform: `translateY(-${p.height * 2}px)`,
                     }}
                   >
+                    {/* Floating name above character */}
+                    <span className="absolute -top-5 text-xs font-bold text-gray-800 bg-white/70 px-1 rounded">
+                      {p.name}
+                    </span>
+
                     <Image
                       src={p.image}
                       alt={p.name}
@@ -263,7 +268,6 @@ export default function PhaseRush() {
                     />
                   </div>
                 </div>
-                <span className="mt-2 text-sm font-semibold text-center">{p.name}</span>
               </div>
             ))}
           </div>
@@ -280,7 +284,7 @@ export default function PhaseRush() {
             transform: translateY(0);
           }
           to {
-            transform: translateY(-8px);
+            transform: translateY(-6px);
           }
         }
       `}</style>
