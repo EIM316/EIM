@@ -21,13 +21,26 @@ type OptionKey = "A" | "B";
 interface Question {
   id: number;
   question: string;
-  option_a: string; // True
-  option_b: string; // False
-  answer: OptionKey;
+
+  // 🅰️🅱️🅲️🅳️ Options
+  option_a: string;
+  option_b: string;
+  option_c?: string;
+  option_d?: string;
+
+  // 🖼️ Optional images for each option
+  option_a_image?: string | null;
+  option_b_image?: string | null;
+  option_c_image?: string | null;
+  option_d_image?: string | null;
+
+  // ✅ Answer & metadata
+  answer: "A" | "B" | "C" | "D";
   question_image?: string | null;
   level_id: number | null;
   mode?: string;
 }
+
 
 interface GameConfig {
   total_game_time: number;
@@ -152,8 +165,10 @@ export default function GameMode4Page() {
       q || {
         id: 0,
         question: "",
-        option_a: "True",
-        option_b: "False",
+        option_a: "",
+        option_b: "",
+        option_c: "",
+        option_d: "",
         answer: "A",
         level_id: null,
         question_image: null,
@@ -230,11 +245,17 @@ export default function GameMode4Page() {
   const handleSaveTheme = async () => {
     if (!selectedTheme) return Swal.fire("Select a theme first", "", "info");
     try {
-      await fetch("/api/gamemode4/music/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ admin_id: user.admin_id, theme_file: selectedTheme }),
-      });
+     await fetch("/api/gamemode4/music/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            admin_id: user.admin_id,
+            gamemode: "gamemode4",
+            theme_name: selectedTheme.split("/").pop()?.replace(".mp3", ""), 
+            theme_file: selectedTheme,
+          }),
+        });
+
       Swal.fire("Saved!", "Music theme saved for Game Mode 4!", "success");
       setShowMusicModal(false);
     } catch {
@@ -445,96 +466,167 @@ export default function GameMode4Page() {
       )}
 
       {/* 🧩 Add/Edit Modal */}
-      {showModal && selectedQuestion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 text-black">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg relative">
+     {/* 🧩 Add/Edit Modal */}
+{showModal && selectedQuestion && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 text-black">
+    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg relative">
+      <button
+        onClick={closeModal}
+        className="absolute top-3 right-3 text-gray-500 hover:text-red-600"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      <h3 className="text-lg font-semibold text-[#548E28] mb-3">
+        {editMode ? "Edit Question" : "Add Question"}
+      </h3>
+
+      {/* 🖼️ Question Image + Text */}
+      <div className="flex gap-3 items-center mb-4">
+        {selectedQuestion.question_image ? (
+          <div className="relative">
+            <img
+              src={selectedQuestion.question_image}
+              alt="Question"
+              className="w-24 h-24 object-contain rounded-lg border bg-gray-100 p-1"
+            />
             <button
-              onClick={closeModal}
-              className="absolute top-3 right-3 text-gray-500 hover:text-red-600"
+              onClick={() =>
+                setSelectedQuestion({ ...selectedQuestion, question_image: null })
+              }
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs"
             >
-              <X className="w-5 h-5" />
+              ✕
             </button>
-            <h3 className="text-lg font-semibold text-[#548E28] mb-3">
-              {editMode ? "Edit Question" : "Add Question"}
-            </h3>
+          </div>
+        ) : (
+          <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-gray-400 rounded-lg cursor-pointer hover:bg-gray-100">
+            <Upload className="w-6 h-6 text-gray-500" />
+            <span className="text-xs text-gray-500 mt-1">Add</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleImageSelect(e)}
+            />
+          </label>
+        )}
 
-            {/* Question Input */}
-            <div className="flex gap-3 items-center mb-4">
-              {selectedQuestion.question_image ? (
-                <div className="relative">
-                  <img
-                    src={selectedQuestion.question_image}
-                    alt="Question"
-                    className="w-24 h-24 object-contain rounded-lg border bg-gray-100 p-1"
-                  />
-                  <button
-                    onClick={() =>
-                      setSelectedQuestion({ ...selectedQuestion, question_image: null })
-                    }
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-gray-400 rounded-lg cursor-pointer hover:bg-gray-100">
-                  <Upload className="w-6 h-6 text-gray-500" />
-                  <span className="text-xs text-gray-500 mt-1">Add</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleImageSelect(e)}
-                  />
-                </label>
-              )}
+        <input
+          type="text"
+          placeholder="Enter question"
+          value={selectedQuestion.question}
+          onChange={(e) =>
+            setSelectedQuestion({ ...selectedQuestion, question: e.target.value })
+          }
+          className="flex-1 border border-gray-400 rounded-md px-3 py-2"
+        />
+      </div>
 
-              <input
-                type="text"
-                placeholder="Enter question"
-                value={selectedQuestion.question}
-                onChange={(e) =>
-                  setSelectedQuestion({ ...selectedQuestion, question: e.target.value })
-                }
-                className="flex-1 border border-gray-400 rounded-md px-3 py-2"
-              />
-            </div>
+      {/* 🅰️🅱️🅲️🅳️ Options */}
+      {(["A", "B", "C", "D"] as const).map((key) => {
+        const optionKey = `option_${key.toLowerCase()}` as "option_a" | "option_b" | "option_c" | "option_d";
+        const imageKey = `${optionKey}_image` as keyof typeof selectedQuestion;
 
-            {/* Answer Selector */}
-            <select
-              value={selectedQuestion.answer}
+        return (
+          <div key={key} className="flex gap-3 items-center mb-3">
+            {/* Option Image */}
+            {selectedQuestion[imageKey] ? (
+              <div className="relative">
+                <img
+                  src={selectedQuestion[imageKey] as string}
+                  alt={`Option ${key}`}
+                  className="w-16 h-16 object-contain rounded-lg border bg-gray-100 p-1"
+                />
+                <button
+                  onClick={() =>
+                    setSelectedQuestion({
+                      ...selectedQuestion,
+                      [imageKey]: null,
+                    })
+                  }
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center w-14 h-14 border-2 border-dashed border-gray-400 rounded-lg cursor-pointer hover:bg-gray-100">
+                <Upload className="w-5 h-5 text-gray-500" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const url = await uploadToCloudinary(file);
+                    if (url)
+                      setSelectedQuestion({
+                        ...selectedQuestion,
+                        [imageKey]: url,
+                      });
+                  }}
+                />
+              </label>
+            )}
+
+            {/* Option Text */}
+            <input
+              type="text"
+              placeholder={`Option ${key}`}
+              value={selectedQuestion[optionKey] || ""}
               onChange={(e) =>
                 setSelectedQuestion({
                   ...selectedQuestion,
-                  answer: e.target.value as OptionKey,
+                  [optionKey]: e.target.value,
                 })
               }
-              className="w-full border border-gray-400 rounded-md px-3 py-2 mb-4"
-            >
-              <option value="A">Answer: True</option>
-              <option value="B">Answer: False</option>
-            </select>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleSaveQuestion}
-                className="flex-1 bg-[#548E28] text-white py-2 rounded-md hover:bg-[#3e6a20]"
-              >
-                {editMode ? "Update" : "Save"}
-              </button>
-
-              {editMode && (
-                <button
-                  onClick={() => handleDelete(selectedQuestion.id)}
-                  className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" /> Remove
-                </button>
-              )}
-            </div>
+              className="flex-1 border border-gray-400 rounded-md px-3 py-2"
+            />
           </div>
-        </div>
-      )}
+        );
+      })}
+
+      {/* ✅ Answer Selector */}
+      <select
+        value={selectedQuestion.answer}
+        onChange={(e) =>
+          setSelectedQuestion({
+            ...selectedQuestion,
+            answer: e.target.value as OptionKey,
+          })
+        }
+        className="w-full border border-gray-400 rounded-md px-3 py-2 mt-2 mb-4"
+      >
+        <option value="A">Answer: A</option>
+        <option value="B">Answer: B</option>
+        <option value="C">Answer: C</option>
+        <option value="D">Answer: D</option>
+      </select>
+
+      {/* Buttons */}
+      <div className="flex gap-3">
+        <button
+          onClick={handleSaveQuestion}
+          className="flex-1 bg-[#548E28] text-white py-2 rounded-md hover:bg-[#3e6a20]"
+        >
+          {editMode ? "Update" : "Save"}
+        </button>
+
+        {editMode && (
+          <button
+            onClick={() => handleDelete(selectedQuestion.id)}
+            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" /> Remove
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
 
       {uploading && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">

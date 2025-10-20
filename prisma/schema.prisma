@@ -17,53 +17,50 @@ model Student {
   email           String              @unique @db.VarChar(150)
   password        String              @db.VarChar(255)
   avatar          String?             @db.VarChar(255)
-  created_at      DateTime            @default(now()) @db.Timestamp(6)
-
-  student_classes StudentClass[]
+  created_at      DateTime?           @default(now()) @db.Timestamp(6)
   progress        Gamemode1Progress[]
+  student_classes StudentClass[]
 
   @@map("student")
   @@schema("eim")
 }
 
 model Teacher {
-  id          Int       @id @default(autoincrement())
-  id_number   String    @unique @db.VarChar(50)
-  first_name  String    @db.VarChar(100)
-  last_name   String    @db.VarChar(100)
-  email       String    @unique @db.VarChar(150)
-  password    String    @db.VarChar(255)
-  avatar      String?   @db.VarChar(255)
-  created_at  DateTime? @default(now()) @db.Timestamp(6)
-
-  classes     Class[]   @relation("TeacherClasses")
+  id         Int       @id @default(autoincrement())
+  id_number  String    @unique @db.VarChar(50)
+  first_name String    @db.VarChar(100)
+  last_name  String    @db.VarChar(100)
+  email      String    @unique @db.VarChar(150)
+  password   String    @db.VarChar(255)
+  avatar     String?   @db.VarChar(255)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  classes    Class[]   @relation("TeacherClasses")
 
   @@map("teacher")
   @@schema("eim")
 }
 
 model ForgotPasswordCode {
-  id                Int      @id @default(autoincrement())
-  id_number         String   @db.VarChar(50)
-  email             String   @db.VarChar(255)
-  verification_code String   @db.Char(6)
-  expires_at        DateTime
-  created_at        DateTime @default(now())
+  id                Int       @id @default(autoincrement())
+  id_number         String    @db.VarChar(50)
+  email             String    @db.VarChar(255)
+  verification_code String    @db.Char(6)
+  expires_at        DateTime  @db.Timestamp(6)
+  created_at        DateTime? @default(now()) @db.Timestamp(6)
 
   @@map("forgot_password_codes")
   @@schema("eim")
 }
 
 model Class {
-  id              Int             @id @default(autoincrement())
-  teacher_id      String          @db.VarChar(50)
-  class_name      String          @db.VarChar(100)
-  class_code      String          @unique @db.VarChar(10)
-  student_count   Int             @default(0)
-  created_at      DateTime        @default(now()) @db.Timestamp(6)
-  updated_at      DateTime        @default(now()) @db.Timestamp(6)
-
-  teacher         Teacher         @relation("TeacherClasses", fields: [teacher_id], references: [id_number])
+  id              Int            @id @default(autoincrement())
+  teacher_id      String         @db.VarChar(50)
+  class_name      String         @db.VarChar(100)
+  class_code      String         @unique @db.VarChar(10)
+  student_count   Int?           @default(0)
+  created_at      DateTime?      @default(now()) @db.Timestamp(6)
+  updated_at      DateTime?      @default(now()) @db.Timestamp(6)
+  teacher         Teacher        @relation("TeacherClasses", fields: [teacher_id], references: [id_number], onDelete: NoAction, onUpdate: NoAction)
   student_classes StudentClass[]
 
   @@map("class")
@@ -71,13 +68,12 @@ model Class {
 }
 
 model StudentClass {
-  id          Int       @id @default(autoincrement())
-  student_id  String    @db.VarChar(50)
-  class_id    Int
-  joined_at   DateTime  @default(now()) @db.Timestamp(6)
-
-  student     Student   @relation(fields: [student_id], references: [id_number])
-  class       Class     @relation(fields: [class_id], references: [id])
+  id         Int      @id @default(autoincrement())
+  student_id String   @db.VarChar(50)
+  class_id   Int
+  joined_at  DateTime @default(now()) @db.Timestamp(6)
+  class      Class    @relation(fields: [class_id], references: [id], onDelete: Cascade, map: "fk_student_class_class")
+  student    Student  @relation(fields: [student_id], references: [id_number], onDelete: Cascade, map: "fk_student_class_student")
 
   @@unique([student_id, class_id])
   @@map("student_class")
@@ -85,37 +81,31 @@ model StudentClass {
 }
 
 model Admin {
-  id          Int       @id @default(autoincrement())
-  admin_id    String    @unique @db.VarChar(50)
-  first_name  String    @db.VarChar(100)
-  last_name   String    @db.VarChar(100)
-  email       String    @unique @db.VarChar(150)
-  password    String    @db.VarChar(255)
-  avatar      String?   @default("/resources/icons/admin.png") @db.VarChar(255)
-  role        String    @default("content_admin") @db.VarChar(20)
-  created_at  DateTime  @default(now()) @db.Timestamp(6)
-  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(6)
-
-  levels      Gamemode1Level[]
-  music       GamemodeMusic[]
-  settings2   Gamemode2Settings[]
-
-  gamemode3_options Gamemode3OptionBank[]
-  gamemode3_sets    Gamemode3Set[]
+  id         Int              @id @default(autoincrement())
+  admin_id   String           @unique @db.VarChar(50)
+  first_name String           @db.VarChar(100)
+  last_name  String           @db.VarChar(100)
+  email      String           @unique @db.VarChar(150)
+  password   String           @db.VarChar(255)
+  avatar     String?          @default("/resources/icons/admin.png") @db.VarChar(255)
+  role       String?          @default("content_admin") @db.VarChar(20)
+  created_at DateTime?        @default(now()) @db.Timestamp(6)
+  updated_at DateTime?        @default(now()) @updatedAt @db.Timestamp(6)
+  levels     Gamemode1Level[]
+  music      GamemodeMusic[]
 
   @@map("admin")
   @@schema("eim")
 }
 
 model Gamemode1Level {
-  id           Int               @id @default(autoincrement())
-  level_number Int               @unique
-  admin_id     String
-  created_at   DateTime          @default(now()) @db.Timestamp(6)
-  updated_at   DateTime          @default(now()) @updatedAt @db.Timestamp(6)
-
-  admin        Admin             @relation(fields: [admin_id], references: [admin_id])
+  id           Int                 @id @default(autoincrement())
+  level_number Int                 @unique
+  admin_id     String?             @db.VarChar(50)
+  created_at   DateTime?           @default(now()) @db.Timestamp(6)
+  updated_at   DateTime?           @default(now()) @updatedAt @db.Timestamp(6)
   questions    Gamemode1[]
+  admin        Admin?              @relation(fields: [admin_id], references: [admin_id], map: "fk_admin")
   progress     Gamemode1Progress[]
 
   @@map("gamemode1_levels")
@@ -123,53 +113,49 @@ model Gamemode1Level {
 }
 
 model Gamemode1 {
-  id               Int              @id @default(autoincrement())
-  level_id         Int?
-  question         String
-  option_a         String
-  option_b         String
-  option_c         String
-  option_d         String
-  answer           String           @db.Char(1)
-  question_image   String?          @db.Text
-  option_a_image   String?          @db.Text
-  option_b_image   String?          @db.Text
-  option_c_image   String?          @db.Text
-  option_d_image   String?          @db.Text
-  created_at       DateTime         @default(now())
-  updated_at       DateTime         @default(now()) @updatedAt
-
-  level            Gamemode1Level?  @relation(fields: [level_id], references: [id])
-  gamemode2_entries Gamemode2[]     @relation("Gamemode1_Gamemode2")
+  id             Int             @id @default(autoincrement())
+  level_id       Int?
+  question       String
+  option_a       String
+  option_b       String
+  option_c       String
+  option_d       String
+  answer         String          @db.Char(1)
+  question_image String?
+  option_a_image String?
+  option_b_image String?
+  option_c_image String?
+  option_d_image String?
+  created_at     DateTime        @default(now()) @db.Timestamp(6)
+  updated_at     DateTime        @default(now()) @updatedAt @db.Timestamp(6)
+  level          Gamemode1Level? @relation(fields: [level_id], references: [id], map: "fk_gamemode1_level")
 
   @@map("gamemode1")
   @@schema("eim")
 }
 
 model GamemodeMusic {
-  id           Int       @id @default(autoincrement())
-  gamemode     String    @default("gamemode1") @db.VarChar(50)
-  theme_name   String    @db.VarChar(100)
-  theme_file   String    @db.VarChar(255)
-  admin_id     String    @db.VarChar(50)
-  created_at   DateTime  @default(now()) @db.Timestamp(6)
-  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(6)
-
-  admin        Admin     @relation(fields: [admin_id], references: [admin_id])
+  id         Int       @id @default(autoincrement())
+  gamemode   String    @default("gamemode1") @db.VarChar(50)
+  theme_name String    @db.VarChar(100)
+  theme_file String    @db.VarChar(255)
+  admin_id   String    @db.VarChar(50)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  updated_at DateTime? @default(now()) @updatedAt @db.Timestamp(6)
+  admin      Admin     @relation(fields: [admin_id], references: [admin_id], onDelete: Cascade, map: "fk_admin_music")
 
   @@map("gamemode_music")
   @@schema("eim")
 }
 
 model Gamemode1Progress {
-  id           Int              @id @default(autoincrement())
-  student_id   String           @db.VarChar(50)
+  id           Int            @id @default(autoincrement())
+  student_id   String         @db.VarChar(50)
   level_id     Int
-  stars        Int              @default(0)
-  completed_at DateTime         @default(now()) @db.Timestamp(6)
-
-  student      Student          @relation(fields: [student_id], references: [id_number])
-  level        Gamemode1Level   @relation(fields: [level_id], references: [id])
+  stars        Int?           @default(0)
+  completed_at DateTime?      @default(now()) @db.Timestamp(6)
+  level        Gamemode1Level @relation(fields: [level_id], references: [id], onDelete: Cascade, map: "fk_progress_level")
+  student      Student        @relation(fields: [student_id], references: [id_number], onDelete: Cascade, map: "fk_progress_student")
 
   @@unique([student_id, level_id])
   @@map("gamemode1_progress")
@@ -184,16 +170,14 @@ model Gamemode2 {
   option_b         String
   option_c         String
   option_d         String
-  answer           String     @db.Char(1)
-  question_image   String?    @db.Text
-  option_a_image   String?    @db.Text
-  option_b_image   String?    @db.Text
-  option_c_image   String?    @db.Text
-  option_d_image   String?    @db.Text
-  created_at       DateTime   @default(now()) @db.Timestamp(6)
-  updated_at       DateTime   @default(now()) @updatedAt @db.Timestamp(6)
-
-  base_question    Gamemode1? @relation("Gamemode1_Gamemode2", fields: [base_question_id], references: [id])
+  answer           String    @db.VarChar(1)
+  question_image   String?
+  option_a_image   String?
+  option_b_image   String?
+  option_c_image   String?
+  option_d_image   String?
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+  updated_at       DateTime? @default(now()) @updatedAt @db.Timestamp(6)
 
   @@map("gamemode2")
   @@schema("eim")
@@ -201,19 +185,17 @@ model Gamemode2 {
 
 model Gamemode2Settings {
   id                Int       @id @default(autoincrement())
-  admin_id          String    @db.VarChar(50)
+  admin_id          String    @db.VarChar(255)
   total_minutes     Int       @default(5)
   total_points      Int       @default(100)
   hints_per_student Int       @default(3)
   time_per_question Int       @default(15)
   shuffle_mode      Boolean   @default(false)
   max_questions     Int       @default(10)
-  theme_name        String?   @db.VarChar(100)
-  theme_file        String?   @db.VarChar(255)
-  created_at        DateTime  @default(now()) @db.Timestamp(6)
-  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamp(6)
-
-  admin             Admin     @relation(fields: [admin_id], references: [admin_id])
+  theme_name        String?
+  theme_file        String?
+  created_at        DateTime? @default(now()) @db.Timestamp(6)
+  updated_at        DateTime? @default(now()) @updatedAt @db.Timestamp(6)
 
   @@map("gamemode2_settings")
   @@schema("eim")
@@ -221,30 +203,47 @@ model Gamemode2Settings {
 
 model Gamemode3OptionBank {
   id          Int       @id @default(autoincrement())
-  admin_id    String    @db.VarChar(50)
+  admin_id    String    @db.VarChar(100)
   option_name String    @db.VarChar(255)
-  image_url   String    @db.Text
-  created_at  DateTime  @default(now()) @db.Timestamp(6)
-  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+  image_url   String
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  updated_at  DateTime? @default(now()) @updatedAt @db.Timestamp(6)
 
-  admin       Admin     @relation(fields: [admin_id], references: [admin_id])
-
-  @@map("gamemode3")      // ✅ your actual table name
+  @@map("gamemode3")
   @@schema("eim")
 }
 
 model Gamemode3Set {
   id              Int       @id @default(autoincrement())
-  admin_id        String    @db.VarChar(50)
+  admin_id        String    @db.VarChar(100)
   set_name        String    @db.VarChar(255)
-  image_url       String?   @db.Text
+  image_url       String?
   rect_data       Json?
   correct_answers Json?
-  created_at      DateTime  @default(now()) @db.Timestamp(6)
-  updated_at      DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+  created_at      DateTime? @default(now()) @db.Timestamp(6)
+  updated_at      DateTime? @default(now()) @updatedAt @db.Timestamp(6)
 
-  admin           Admin     @relation(fields: [admin_id], references: [admin_id])
+  @@map("gamemode3_sets")
+  @@schema("eim")
+}
 
-  @@map("gamemode3_sets")  // ✅ confirmed correct
+model Gamemode4 {
+  id               Int       @id @default(autoincrement())
+  base_question_id Int?
+  question         String
+  option_a         String
+  option_b         String
+  option_c         String
+  option_d         String
+  answer           String    @db.VarChar(1)
+  question_image   String?
+  option_a_image   String?
+  option_b_image   String?
+  option_c_image   String?
+  option_d_image   String?
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+  updated_at       DateTime? @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@map("gamemode4")
   @@schema("eim")
 }
