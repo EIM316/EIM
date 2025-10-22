@@ -7,7 +7,13 @@ import { Menu, LogOut, Volume2, VolumeX, Loader2 } from "lucide-react";
 import Swal from "sweetalert2";
 import io from "socket.io-client";
 
-const socket = io("http://localhost:3001", { autoConnect: false });
+const socket = io(
+  process.env.NEXT_PUBLIC_SOCKET_URL || "https://eim-server.onrender.com",
+  {
+    transports: ["websocket"],
+    autoConnect: false,
+  }
+);
 
 interface Player {
   id?: string;

@@ -7,7 +7,14 @@ import Swal from "sweetalert2";
 import { LogOut, Search, X, Menu, ArrowLeft, Play } from "lucide-react";
 import io from "socket.io-client";
 
-const socket = io("http://localhost:3001", { autoConnect: false });
+// ✅ connect to your Render socket server
+const socket = io(
+  process.env.NEXT_PUBLIC_SOCKET_URL || "https://eim-server.onrender.com",
+  {
+    transports: ["websocket"],
+    autoConnect: false,
+  }
+);
 
 export default function WaitingRoomPage() {
   const router = useRouter();
@@ -15,6 +22,7 @@ export default function WaitingRoomPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [players, setPlayers] = useState<any[]>([]);
+  const [connected, setConnected] = useState(false);
 
   const professor = {
     name: "MS. ASH",
@@ -25,14 +33,43 @@ export default function WaitingRoomPage() {
     hintAllowed: true,
   };
 
+  /* 🧠 Connect to socket and join room */
   useEffect(() => {
     socket.connect();
 
-    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
-    if (!savedUser.first_name) return;
+    socket.on("connect", () => {
+      console.log("✅ Connected to socket:", socket.id);
+      setConnected(true);
+    });
+
+    socket.on("disconnect", () => {
+      console.warn("❌ Disconnected from server");
+      setConnected(false);
+    });
+
+    // 🔹 Load user data safely
+    const stored = localStorage.getItem("user");
+    if (!stored) {
+      console.warn("⚠️ No user found in localStorage");
+      return;
+    }
+
+    let savedUser;
+    try {
+      savedUser = JSON.parse(stored);
+    } catch (err) {
+      console.error("Error parsing user JSON:", err);
+      return;
+    }
+
+    if (!savedUser.first_name) {
+      console.warn("⚠️ Missing first_name in saved user");
+      return;
+    }
+
     setUser(savedUser);
 
-    // join the room
+    // 🔹 Join the room AFTER confirming connection
     socket.emit(
       "join_room",
       professor.gameCode,
@@ -40,8 +77,13 @@ export default function WaitingRoomPage() {
       savedUser.avatar || "/resources/avatars/student1.png"
     );
 
-    // when player list updates
+    console.log(
+      `📤 Emitted join_room → Room: ${professor.gameCode}, Player: ${savedUser.first_name}`
+    );
+
+    // 🔹 Listen for player list updates
     socket.on("update_player_list", (playerArray) => {
+      console.log("👥 Updated player list:", playerArray);
       setPlayers(
         playerArray.map((p: any) => ({
           ...p,
@@ -53,7 +95,7 @@ export default function WaitingRoomPage() {
       );
     });
 
-    // 🔹 when the game starts (from any player, e.g. professor)
+    // 🔹 Listen for game start event
     socket.on("game_started", (playerList) => {
       console.log("🎮 Game started by professor!");
       localStorage.setItem("players", JSON.stringify(playerList));
@@ -61,19 +103,23 @@ export default function WaitingRoomPage() {
     });
 
     return () => {
+      socket.off("connect");
+      socket.off("disconnect");
       socket.off("update_player_list");
       socket.off("game_started");
       socket.disconnect();
     };
-  }, []);
+  }, [router]);
 
-  // 🔹 Professor starts the game for everyone
+  /* 🟢 Professor starts the game */
   const handleStart = () => {
     if (!players.length) return;
+    console.log("▶️ Professor started the game with:", players);
     localStorage.setItem("players", JSON.stringify(players));
     socket.emit("start_game", professor.gameCode, players);
   };
 
+  /* 🚪 Leave lobby */
   const handleLeave = () => {
     Swal.fire({
       title: "Leave Lobby?",
@@ -91,6 +137,7 @@ export default function WaitingRoomPage() {
     });
   };
 
+  /* 🔒 Logout */
   const handleLogout = () => {
     Swal.fire({
       title: "Logout?",
@@ -109,6 +156,7 @@ export default function WaitingRoomPage() {
     });
   };
 
+  /* 🕒 Loading state */
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-700">
@@ -117,6 +165,7 @@ export default function WaitingRoomPage() {
     );
   }
 
+  /* 👥 Display list */
   const displayPlayers = [
     {
       name: "YOU",
@@ -128,6 +177,7 @@ export default function WaitingRoomPage() {
     ...players.filter((p) => p.name !== user.first_name),
   ];
 
+  /* 🧱 UI */
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-white relative">
       {/* Header */}
@@ -213,6 +263,12 @@ export default function WaitingRoomPage() {
             </span>
           </div>
         </div>
+
+        {!connected && (
+          <p className="text-red-600 text-sm mt-2">
+            ⚠️ Not connected to server — check Render URL
+          </p>
+        )}
       </div>
 
       {/* Lobby Section */}
@@ -246,7 +302,7 @@ export default function WaitingRoomPage() {
         </div>
       </div>
 
-      {/* Buttons Section */}
+      {/* Buttons */}
       <div className="flex flex-col items-center gap-3 mt-8">
         <button
           onClick={handleStart}

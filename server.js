@@ -1,12 +1,23 @@
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 
-const httpServer = createServer();
+// ✅ Render assigns a dynamic port
+const PORT = process.env.PORT || 3001;
+
+// ✅ Simple HTTP response (so Render doesn't kill the instance)
+const httpServer = createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("🎮 Socket.IO server is running and ready!\n");
+});
+
+// ✅ Allow your Vercel app (or all origins for now)
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
+    origin: process.env.NEXT_PUBLIC_SOCKET_URL || "*",
     methods: ["GET", "POST"],
+    credentials: true,
   },
+  transports: ["websocket", "polling"], // 👈 ensure it works both on Render and local
 });
 
 // 🔹 Structure: roomCode → array of player objects
@@ -82,6 +93,8 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(3001, () => {
-  console.log("🎮 Socket.IO server running on port 3001");
+// ✅ Start server
+httpServer.listen(PORT, () => {
+  console.log(`🎮 Socket.IO server running on port ${PORT}`);
+  console.log(`🌐 Allowed origin: ${process.env.FRONTEND_URL || "All (*)"}`);
 });
