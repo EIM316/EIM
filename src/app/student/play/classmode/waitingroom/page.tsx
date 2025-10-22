@@ -5,26 +5,16 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 import { LogOut, Search, X, Menu, ArrowLeft, Play, Loader2 } from "lucide-react";
-import io from "socket.io-client";
-
-// ✅ Use Render server, force WebSocket for instant connection
-const socket = io("https://eim-server.onrender.com", {
-  transports: ["websocket"],
-  reconnection: true,
-  reconnectionAttempts: 10,
-  reconnectionDelay: 1000,
-  timeout: 8000, // 8s connect timeout
-  autoConnect: false,
-});
+import { supabase } from "@/lib/supabaseClient";
 
 export default function WaitingRoomPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const [players, setPlayers] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(true); // ⏳ New loading state
+  const [connecting, setConnecting] = useState(true);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const professor = {
     name: "MS. ASH",
@@ -35,89 +25,137 @@ export default function WaitingRoomPage() {
     hintAllowed: true,
   };
 
-  /* 🧠 Connect to socket and join room */
   useEffect(() => {
     const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
-    if (!savedUser.first_name) {
+    if (!savedUser.id_number) {
       router.push("/");
       return;
     }
-    setUser(savedUser);
 
-    // 🔹 Show connecting spinner
+    setUser(savedUser);
     setConnecting(true);
 
-    // 🔹 Establish connection
-    socket.connect();
+    const joinLobby = async () => {
+      try {
+        const { error } = await supabase.from("players").upsert(
+          {
+            id_number: savedUser.id_number,
+            game_code: professor.gameCode,
+            name: savedUser.first_name,
+            avatar: savedUser.avatar || "/resources/avatars/student1.png",
+          },
+          { onConflict: "game_code,id_number" }
+        );
 
-    socket.on("connect", () => {
-      console.log("✅ Connected to socket:", socket.id);
-      setConnected(true);
-      setConnecting(false);
+        if (error) console.error("❌ Error joining lobby:", error.message);
+        else console.log("✅ Joined or updated player:", savedUser.first_name);
 
-      // Join room immediately after connect
-      socket.emit(
-        "join_room",
-        professor.gameCode,
-        savedUser.first_name,
-        savedUser.avatar || "/resources/avatars/student1.png"
-      );
-    });
+        setConnected(true);
+        setConnecting(false);
+        refreshPlayers();
+      } catch (err: any) {
+        console.error("❌ Join Lobby Error:", err.message);
+        setConnecting(false);
+      }
+    };
 
-    socket.on("connect_error", (err) => {
-      console.warn("⚠️ Socket connect error:", err.message);
-      setConnected(false);
-      setConnecting(true);
+    const refreshPlayers = async () => {
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .eq("game_code", professor.gameCode);
+      if (error) console.error("⚠️ Error fetching players:", error.message);
+      setPlayers(data || []);
+    };
 
-      // Retry connection in a few seconds
-      setTimeout(() => socket.connect(), 3000);
-    });
+    // 🔄 Player realtime updates
+    const playerChannel = supabase
+      .channel("players-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "players",
+          filter: `game_code=eq.${professor.gameCode}`,
+        },
+        (payload) => {
+          console.log("👥 Player update:", payload);
+          refreshPlayers();
+        }
+      )
+      .subscribe();
 
-    socket.on("disconnect", () => {
-      console.warn("❌ Disconnected from server");
-      setConnected(false);
-      setConnecting(true);
-    });
+    // 🎮 Game start listener
+    const gameChannel = supabase
+      .channel("game-events")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "game_events",
+          filter: `game_code=eq.${professor.gameCode}`,
+        },
+        (payload) => {
+          if (payload.new.event_type === "game_started") {
+            console.log("🎮 Game started!");
+            // ✅ Navigate but DON'T delete player data
+            router.push("/student/play/classmode/waitingroom/start");
+          }
+        }
+      )
+      .subscribe();
 
-    // 🔹 Listen for player list updates
-    socket.on("update_player_list", (playerArray) => {
-      console.log("👥 Updated player list:", playerArray);
-      setPlayers(
-        playerArray.map((p: any) => ({
-          ...p,
-          avatar:
-            p.avatar && p.avatar.trim() !== ""
-              ? p.avatar
-              : "/resources/avatars/student1.png",
-        }))
-      );
-    });
+    joinLobby();
 
-    // 🔹 Listen for game start
-    socket.on("game_started", (playerList) => {
-      console.log("🎮 Game started by professor!");
-      localStorage.setItem("players", JSON.stringify(playerList));
-      router.push("/student/play/classmode/waitingroom/start");
-    });
-
+    // ✅ Cleanup: only remove player if NOT going to start page
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
-      socket.off("update_player_list");
-      socket.off("game_started");
-      socket.disconnect();
+      supabase.removeChannel(playerChannel);
+      supabase.removeChannel(gameChannel);
+
+      // detect if navigation is going to start page
+      const nextRoute = window.location.pathname;
+      const goingToStart =
+        nextRoute.includes("/waitingroom/start") ||
+        nextRoute.includes("/classmode/waitingroom/start");
+
+      if (!goingToStart) {
+        // remove only if truly leaving
+        leaveLobby(savedUser);
+      }
     };
   }, [router]);
 
-  /* 🟢 Professor starts the game */
-  const handleStart = () => {
-    if (!players.length) return;
-    localStorage.setItem("players", JSON.stringify(players));
-    socket.emit("start_game", professor.gameCode, players);
+  // 🧹 Leave logic
+  const leaveLobby = async (userData: any) => {
+    if (!userData?.id_number) return;
+    await supabase
+      .from("players")
+      .delete()
+      .eq("game_code", professor.gameCode)
+      .eq("id_number", userData.id_number);
+    console.log("👋 Player left lobby:", userData.first_name);
   };
 
-  /* 🚪 Leave lobby */
+  // 🎮 Start the game
+  const handleStart = async () => {
+    if (!players.length) return;
+
+    const { error } = await supabase.from("game_events").insert([
+      { game_code: professor.gameCode, event_type: "game_started" },
+    ]);
+
+    if (error) {
+      console.error("❌ Error starting game:", error.message);
+      Swal.fire("Error", "Failed to start the game!", "error");
+    } else {
+      console.log("🎮 Game start event broadcasted");
+      Swal.fire("Started!", "Game has started!", "success");
+    }
+  };
+
+  // 🚪 Leave button
   const handleLeave = () => {
     Swal.fire({
       title: "Leave Lobby?",
@@ -127,15 +165,15 @@ export default function WaitingRoomPage() {
       confirmButtonColor: "#7b2020",
       cancelButtonColor: "#aaa",
       confirmButtonText: "Yes, leave",
-    }).then((res) => {
-      if (res.isConfirmed) {
-        socket.disconnect();
+    }).then(async (res) => {
+      if (res.isConfirmed && user?.id_number) {
+        await leaveLobby(user);
         router.push("/student/play/classmode");
       }
     });
   };
 
-  /* 🔒 Logout */
+  // 🔒 Logout button
   const handleLogout = () => {
     Swal.fire({
       title: "Logout?",
@@ -145,21 +183,21 @@ export default function WaitingRoomPage() {
       confirmButtonColor: "#7b2020",
       cancelButtonColor: "#aaa",
       confirmButtonText: "Yes, logout",
-    }).then((res) => {
-      if (res.isConfirmed) {
+    }).then(async (res) => {
+      if (res.isConfirmed && user?.id_number) {
         localStorage.clear();
-        socket.disconnect();
+        await leaveLobby(user);
         router.push("/");
       }
     });
   };
 
-  /* 🌀 Show circular loader while connecting */
+  // 🌀 Loader
   if (connecting) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white text-gray-700">
         <Loader2 className="animate-spin w-12 h-12 text-[#7b2020] mb-4" />
-        <p className="font-semibold text-[#7b2020]">Connecting to server...</p>
+        <p className="font-semibold text-[#7b2020]">Connecting to lobby...</p>
         <p className="text-sm text-gray-500 mt-1">Please wait a moment ⏳</p>
       </div>
     );
@@ -173,7 +211,6 @@ export default function WaitingRoomPage() {
     );
   }
 
-  /* 👥 Display list */
   const displayPlayers = [
     {
       name: "YOU",
@@ -182,18 +219,17 @@ export default function WaitingRoomPage() {
           ? user.avatar
           : "/resources/avatars/student1.png",
     },
-    ...players.filter((p) => p.name !== user.first_name),
+    ...players.filter((p) => p.id_number !== user.id_number),
   ];
 
-  /* 🧱 UI */
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-white relative">
       {/* Header */}
-      <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md relative">
+      <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md">
         <div className="flex items-center space-x-3">
           <ArrowLeft
             className="w-6 h-6 cursor-pointer hover:text-gray-300"
-            onClick={() => router.push("/student/play/classmode")}
+            onClick={handleLeave}
           />
           <Image
             src={
@@ -210,11 +246,10 @@ export default function WaitingRoomPage() {
             {user.first_name?.toUpperCase()}
           </span>
         </div>
-
         <div className="flex items-center gap-4">
           <Search
             onClick={() => setShowSearch(true)}
-            className="w-6 h-6 cursor-pointer hover:text-gray-300 text-white"
+            className="w-6 h-6 cursor-pointer hover:text-gray-300"
           />
           <Menu className="w-7 h-7 cursor-pointer" />
           <LogOut
@@ -222,27 +257,6 @@ export default function WaitingRoomPage() {
             className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"
           />
         </div>
-
-        {/* Search Bar */}
-        {showSearch && (
-          <div className="absolute inset-0 bg-[#7b2020] flex items-center justify-center px-4 z-10">
-            <input
-              type="text"
-              placeholder="Search for key terms..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-3/4 px-3 py-2 rounded-md text-white border"
-              autoFocus
-            />
-            <X
-              onClick={() => {
-                setSearchTerm("");
-                setShowSearch(false);
-              }}
-              className="ml-3 w-6 h-6 cursor-pointer text-white"
-            />
-          </div>
-        )}
       </header>
 
       {/* Professor Info */}
@@ -271,12 +285,6 @@ export default function WaitingRoomPage() {
             </span>
           </div>
         </div>
-
-        {!connected && (
-          <p className="text-red-600 text-sm mt-2 animate-pulse">
-            ⚠️ Reconnecting to server...
-          </p>
-        )}
       </div>
 
       {/* Lobby */}
@@ -284,7 +292,6 @@ export default function WaitingRoomPage() {
         <span className="text-white font-bold text-xl mb-3">
           {displayPlayers.length}/8 PLAYERS
         </span>
-
         <div className="grid grid-cols-3 gap-4">
           {displayPlayers.map((p, i) => (
             <div

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function StartPage() {
   const router = useRouter();
@@ -11,48 +12,63 @@ export default function StartPage() {
   const mode = "Phase Rush";
   const modePath = "/classmode/gamemodes/phaserush";
 
+  const professor = {
+    gameCode: "5ABC9", // 🔑 Match the same game code from Waiting Room
+  };
+
+  /* 🧠 Load players & listen in realtime */
   useEffect(() => {
-    // ✅ Safe JSON parser (prevents "undefined" parse errors)
-    const getSafeJSON = (key: string, fallback: any) => {
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw || raw === "undefined" || raw === "null") return fallback;
-        return JSON.parse(raw);
-      } catch {
-        return fallback;
-      }
+    const fetchPlayers = async () => {
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .eq("game_code", professor.gameCode);
+
+      if (error) console.error("❌ Error fetching players:", error.message);
+      else setPlayers(data || []);
+      setLoading(false);
     };
 
-    const storedPlayers = getSafeJSON("players", []);
-    const savedUser = getSafeJSON("user", {});
+    // Initial load
+    fetchPlayers();
 
-    const allPlayers =
-      storedPlayers.length > 0
-        ? storedPlayers
-        : [
-            {
-              name: savedUser.first_name || "You",
-              avatar:
-                savedUser.avatar || "/resources/avatars/student1.png",
-            },
-          ];
+    // 🔄 Realtime subscription for player changes
+    const channel = supabase
+      .channel("players-start-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "players",
+          filter: `game_code=eq.${professor.gameCode}`,
+        },
+        (payload) => {
+          console.log("🔄 Realtime update:", payload);
+          fetchPlayers(); // Refresh whenever players join/leave
+        }
+      )
+      .subscribe();
 
-    setPlayers(allPlayers);
-    setLoading(false);
-
-    // ⏱️ Auto redirect to Phase Rush after short delay
-    const timeout = setTimeout(() => {
+    // ⏱️ Auto redirect after short delay
+    const redirectTimer = setTimeout(() => {
       router.push(modePath);
-    }, 2000);
+    }, 3000);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(redirectTimer);
+      supabase.removeChannel(channel);
+    };
   }, [router]);
 
+  /* 🧱 UI */
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-white relative">
       {/* Title */}
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-[#7b2020] mb-2">🏁 Preparing Game...</h1>
+        <h1 className="text-3xl font-bold text-[#7b2020] mb-2">
+          🏁 Preparing Game...
+        </h1>
         <p className="text-lg text-gray-700 font-semibold">
           Next Mode: <span className="text-[#7b2020]">{mode}</span>
         </p>
@@ -68,18 +84,22 @@ export default function StartPage() {
 
       {/* Player List */}
       <div className="mt-10 flex flex-wrap justify-center gap-6">
-        {players.map((p, i) => (
-          <div key={i} className="flex flex-col items-center text-center">
-            <img
-              src={p.avatar || "/resources/avatars/student1.png"}
-              alt={p.name}
-              className="w-14 h-14 rounded-full border-2 border-[#7b2020] shadow-md bg-white"
-            />
-            <span className="text-sm font-semibold text-[#7b2020] mt-1">
-              {p.name}
-            </span>
-          </div>
-        ))}
+        {players.length > 0 ? (
+          players.map((p, i) => (
+            <div key={i} className="flex flex-col items-center text-center">
+              <img
+                src={p.avatar || "/resources/avatars/student1.png"}
+                alt={p.name}
+                className="w-14 h-14 rounded-full border-2 border-[#7b2020] shadow-md bg-white"
+              />
+              <span className="text-sm font-semibold text-[#7b2020] mt-1">
+                {p.name}
+              </span>
+            </div>
+          ))
+        ) : (
+          <p className="text-gray-500 text-sm mt-3">No players yet...</p>
+        )}
       </div>
 
       {/* Back Button */}
