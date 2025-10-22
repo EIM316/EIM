@@ -106,11 +106,10 @@ export default function PlayPage() {
       </header>
 
       {/* ✅ Main content */}
-      <main className="flex flex-col items-center w-full px-4">
-        <h2 className="text-xl font-bold text-[#7b2020] mb-4">🎮 Choose Your Mode</h2>
+<main className="flex flex-col items-center w-full px-4 max-w-6xl mx-auto">
+  <h2 className="text-xl font-bold text-[#7b2020] mb-4">🎮 Choose Your Mode</h2>
 
-        {/* ✅ Responsive 2x2 grid layout with enforced perfect squares */}
-<div className="grid grid-cols-2 gap-4 w-full max-w-md">
+<div className="grid grid-cols-2 gap-4 w-full max-w-md mx-auto">
   {[
     {
       title: "REFRESHER",
@@ -128,41 +127,46 @@ export default function PlayPage() {
       title: "CLASS MODE",
       desc: "JOIN A CLASS",
       img: "/resources/modes/class.png",
-      route: "/on-going",
+      route: "/student/play/classmode",
     },
     {
-      title: "GAME TESTING",
-      desc: "TRY NEW GAMES",
+      title: "MORE MODES",
+      desc: "TRY OTHER SPECIAL GAMES",
       img: "/resources/modes/betatest.jpg",
       route: "/student/play/gametest",
     },
   ].map((mode, i) => (
     <div
-      key={i}
-      onClick={() => router.push(mode.route)}
-      className="relative border-2 border-black rounded-lg shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer bg-white aspect-square flex flex-col justify-between items-center p-3 overflow-hidden"
-    >
-      <div className="text-center">
-        <h3 className="text-md font-bold text-[#7b2020] leading-tight">
-          {mode.title}
-        </h3>
-        <p className="text-gray-600 text-xs">{mode.desc}</p>
-      </div>
+  key={i}
+  onClick={() => router.push(mode.route)}
+  className="w-[140px] h-[140px] sm:w-[160px] sm:h-[160px] border border-black rounded-lg flex flex-col items-center justify-center p-3 text-center bg-white hover:scale-105 hover:shadow-lg transition-all cursor-pointer"
+>
 
-      <div className="flex-1 flex items-center justify-center w-full">
+      {/* Image */}
+      <div className="flex items-center justify-center h-16 mb-2">
         <Image
           src={mode.img}
           alt={mode.title}
-          width={100}
-          height={100}
-          className="object-contain max-h-[70%]"
+          width={60}
+          height={60}
+          className="object-contain"
         />
+      </div>
+
+      {/* Text */}
+      <div>
+        <h3 className="text-sm font-bold text-[#7b2020] leading-tight">
+          {mode.title}
+        </h3>
+        <p className="text-gray-600 text-[11px] mt-[1px]">{mode.desc}</p>
       </div>
     </div>
   ))}
 </div>
 
-      </main>
+
+</main>
+
     </div>
   );
 }

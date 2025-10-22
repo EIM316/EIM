@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Menu, LogOut, Search, X } from "lucide-react";
+import { Menu, LogOut, Search, X, ArrowLeft } from "lucide-react";
 import Swal from "sweetalert2";
 
 type Rect = { id: number; x: number; y: number; w: number; h: number; color: string };
@@ -27,6 +27,7 @@ export default function SchematicBuilderGame() {
   const [sets, setSets] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
+  const [diagramLoaded, setDiagramLoaded] = useState(false);
 
   // 🎵 Music
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export default function SchematicBuilderGame() {
     setUser(JSON.parse(savedUser));
   }, [router]);
 
-  /* ---------- Utility: Fisher–Yates shuffle ---------- */
+  /* ---------- Utility: Shuffle ---------- */
   function shuffle<T>(arr: T[]): T[] {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -55,7 +56,7 @@ export default function SchematicBuilderGame() {
     return a;
   }
 
-  /* ---------- Fetch All Sets ---------- */
+  /* ---------- Fetch Sets ---------- */
   useEffect(() => {
     if (!user) return;
 
@@ -68,7 +69,6 @@ export default function SchematicBuilderGame() {
           return;
         }
 
-        // 🔀 Shuffle all sets
         const shuffledSets = shuffle(setsData);
         setSets(shuffledSets);
         loadSet(shuffledSets[0]);
@@ -78,13 +78,14 @@ export default function SchematicBuilderGame() {
     })();
   }, [user]);
 
-  /* ---------- Load One Set ---------- */
+  /* ---------- Load Single Set ---------- */
   const loadSet = async (setData: any) => {
     try {
       setSetName(setData.set_name);
       const detailRes = await fetch(`/api/gamemode3/set/get?id=${setData.id}`);
       const data = await detailRes.json();
 
+      setDiagramLoaded(false); // wait for image load
       setDiagram(data.image_url);
 
       const parsedRects = Array.isArray(data.rect_data)
@@ -104,7 +105,7 @@ export default function SchematicBuilderGame() {
     }
   };
 
-  /* ---------- Music Fetch ---------- */
+  /* ---------- Fetch Background Music ---------- */
   useEffect(() => {
     (async () => {
       try {
@@ -113,35 +114,34 @@ export default function SchematicBuilderGame() {
         const data = await res.json();
         setMusicUrl(data.file_url || data.music_url || data.theme_file || data.url || null);
       } catch (err) {
-        console.error("Music error:", err);
+        console.error("Music fetch error:", err);
       }
     })();
   }, []);
 
-  /* ---------- Background Music ---------- */
+  /* ---------- Play Music After Diagram Loads ---------- */
   useEffect(() => {
-    if (!musicUrl) return;
+    if (!musicUrl || !diagramLoaded) return;
     const audio = new Audio(musicUrl);
     audio.loop = true;
-    audio.volume = 0.5;
+    audio.volume = 0.4;
     audioRef.current = audio;
 
     const playMusic = async () => {
       try {
         await audio.play();
-        window.removeEventListener("click", playMusic);
       } catch {
-        /* ignore */
+        /* ignore autoplay block */
       }
     };
 
-    window.addEventListener("click", playMusic);
+    playMusic();
+
     return () => {
       audio.pause();
       audio.currentTime = 0;
-      window.removeEventListener("click", playMusic);
     };
-  }, [musicUrl]);
+  }, [musicUrl, diagramLoaded]);
 
   const stopMusic = () => {
     if (audioRef.current) {
@@ -150,10 +150,9 @@ export default function SchematicBuilderGame() {
     }
   };
 
-  /* ---------- Handle Placement ---------- */
+  /* ---------- Placement ---------- */
   const handlePlaceAnswer = (rectId: number) => {
     if (!dragging) return;
-
     const correctAnswer = answers[rectId - 1];
     if (!correctAnswer) return;
 
@@ -165,18 +164,17 @@ export default function SchematicBuilderGame() {
       });
       setDragging(null);
     } else {
-      // ❌ Wrong attempt
       setWrongAttempt(dragging);
       setDragging(null);
       setTimeout(() => {
         setPlaced(new Array(answers.length).fill(null));
-        setShuffledAnswers(shuffle(answers)); // 🔀 reshuffle on wrong attempt
+        setShuffledAnswers(shuffle(answers));
         setWrongAttempt(null);
       }, 1000);
     }
   };
 
-  /* ---------- Watch for completion ---------- */
+  /* ---------- Completion Check ---------- */
   useEffect(() => {
     if (placed.length === 0) return;
     const allCorrect = rects.length > 0 && placed.every((p, i) => p && p.id === answers[i]?.id);
@@ -195,7 +193,7 @@ export default function SchematicBuilderGame() {
         if (currentIndex + 1 < sets.length) {
           const next = currentIndex + 1;
           setCurrentIndex(next);
-          loadSet(sets[next]); // 🔀 New set automatically reshuffles
+          loadSet(sets[next]);
         } else {
           Swal.fire({
             icon: "info",
@@ -218,31 +216,28 @@ export default function SchematicBuilderGame() {
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-white relative">
-      {/* Header */}
-      <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md relative mb-4">
-        <div
-          className="flex items-center space-x-3 cursor-pointer"
+      {/* ✅ Navbar with Back + Center Title + Icons */}
+      <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md relative">
+        {/* Left: Back button */}
+        <button
           onClick={() => {
             stopMusic();
             router.push("/student/play/gametest");
           }}
+          className="flex items-center gap-2 hover:text-gray-300"
         >
-          <Image
-            src={user.avatar || "/student-avatar.png"}
-            alt="Profile"
-            width={40}
-            height={40}
-            className="rounded-full border-2 border-white"
-          />
-          <span className="font-semibold text-lg">{user.first_name?.toUpperCase()}</span>
-        </div>
+          <ArrowLeft className="w-6 h-6" />
+         
+        </button>
 
+        {/* Center: Title */}
+       <h1 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-bold text-sm tracking-wide">
+          SCHEMATIC BUILDER
+        </h1>
+
+        {/* Right: Menu icons */}
         <div className="flex items-center gap-4">
-          <Search
-            onClick={() => setShowSearch(true)}
-            className="w-6 h-6 cursor-pointer hover:text-gray-300 text-white"
-          />
-          <Menu className="w-7 h-7 cursor-pointer" />
+          
           <LogOut
             onClick={() => {
               stopMusic();
@@ -260,7 +255,7 @@ export default function SchematicBuilderGame() {
               placeholder="Search for key terms..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-3/4 px-3 py-2 rounded-md text-white border"
+              className="w-3/4 px-3 py-2 rounded-md text-white border bg-[#5c1515]"
               autoFocus
             />
             <X
@@ -274,7 +269,7 @@ export default function SchematicBuilderGame() {
         )}
       </header>
 
-      {/* Main */}
+      {/* Main Diagram Section */}
       <main className="w-full max-w-lg flex flex-col items-center">
         <h2 className="text-xl font-bold text-[#7b2020] mb-1">{setName || "Loading..."}</h2>
         <p className="text-gray-600 mb-3">Score: {score}</p>
@@ -284,7 +279,13 @@ export default function SchematicBuilderGame() {
           className="relative border-2 border-gray-300 rounded-lg overflow-hidden w-full aspect-square flex items-center justify-center bg-gray-50"
         >
           {diagram ? (
-            <Image src={diagram} alt="Diagram" fill className="object-contain" />
+            <Image
+              src={diagram}
+              alt="Diagram"
+              fill
+              className="object-contain"
+              onLoadingComplete={() => setDiagramLoaded(true)} // ✅ trigger music only when fully loaded
+            />
           ) : (
             <p className="text-gray-500 text-sm">Loading diagram...</p>
           )}
@@ -323,7 +324,7 @@ export default function SchematicBuilderGame() {
           ))}
         </div>
 
-        {/* Shuffled Options */}
+        {/* Options */}
         <div className="flex justify-center gap-3 mt-5 flex-wrap">
           {shuffledAnswers.map((a, i) => (
             <div
@@ -350,7 +351,7 @@ export default function SchematicBuilderGame() {
       {/* Animations */}
       <style jsx>{`
         @keyframes shake {
-          0% {
+          0%, 100% {
             transform: translateX(0);
           }
           25% {
@@ -361,9 +362,6 @@ export default function SchematicBuilderGame() {
           }
           75% {
             transform: translateX(-8px);
-          }
-          100% {
-            transform: translateX(0);
           }
         }
         .shake {

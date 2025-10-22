@@ -140,69 +140,89 @@
     };
 
     /* ---------- Dynamic Question Popup ---------- */
-    const askQuestion = async () => {
-      if (questions.length === 0) return;
+const askQuestion = async () => {
+  if (questions.length === 0) return;
 
-      const q = questions[Math.floor(Math.random() * questions.length)];
+  const q = questions[Math.floor(Math.random() * questions.length)];
+  const correctKey = q.answer;
 
-      const correctKey = q.answer;
-      const allOptions: ("A" | "B" | "C" | "D")[] = ["A", "B", "C", "D"];
-      const wrongOptions = allOptions.filter((opt) => opt !== correctKey);
-      const wrongKey = wrongOptions[Math.floor(Math.random() * wrongOptions.length)];
+  const hasImages =
+    q.option_a_image || q.option_b_image || q.option_c_image || q.option_d_image;
 
-      const selectedOptions = shuffle([correctKey, wrongKey]);
-      const hasImages =
-        q.option_a_image || q.option_b_image || q.option_c_image || q.option_d_image;
+  let selectedOptions: ("A" | "B" | "C" | "D")[] = [];
 
-      let htmlContent = `
-        <div style="text-align:center;">
-          ${q.question_image
-            ? `<img src="${q.question_image}" style="max-width:200px;max-height:150px;margin-bottom:10px;border-radius:8px;" />`
-            : ""}
-          <p style="font-size:18px;margin-bottom:10px;">${q.question}</p>
-        </div>
-        <div style="display:flex;justify-content:space-around;align-items:center;margin-top:10px;">
-          ${selectedOptions
-            .map((key, index) => {
-              const textKey = (q as any)[`option_${key.toLowerCase()}`];
-              const imgKey = (q as any)[`option_${key.toLowerCase()}_image`];
-              return `
-                <div style="text-align:center;">
-                  ${
-                    imgKey
-                      ? `<img src="${imgKey}" style="max-width:100px;max-height:100px;border-radius:8px;" />`
-                      : ""
-                  }
-                  <p><b>${index === 0 ? "A" : "B"}.</b> ${textKey}</p>
-                </div>
-              `;
-            })
-            .join("")}
-        </div>
-      `;
+  if (hasImages) {
+    // ✅ show all 4 options (A–D)
+    selectedOptions = ["A", "B", "C", "D"];
+  } else {
+    // ✅ show only 2 options (correct + 1 random wrong)
+    const allOptions: ("A" | "B" | "C" | "D")[] = ["A", "B", "C", "D"];
+    const wrongOptions = allOptions.filter((opt) => opt !== correctKey);
+    const wrongKey = wrongOptions[Math.floor(Math.random() * wrongOptions.length)];
+    selectedOptions = shuffle([correctKey, wrongKey]);
+  }
 
-      const result = await Swal.fire({
-        title: "🧠 Choose the Correct Answer",
-        html: htmlContent,
-        showDenyButton: true,
-        confirmButtonText: "A",
-        denyButtonText: "B",
-        confirmButtonColor: "#548E28",
-        timer: config.question_interval * 1000,
-        timerProgressBar: true,
-        background: "#fff",
-        width: hasImages ? "550px" : "400px",
+  // ✅ Build HTML for options
+  let htmlContent = `
+    <div style="text-align:center;">
+      ${
+        q.question_image
+          ? `<img src="${q.question_image}" style="max-width:200px;max-height:150px;margin-bottom:10px;border-radius:8px;" />`
+          : ""
+      }
+      <p style="font-size:18px;margin-bottom:10px;">${q.question}</p>
+    </div>
+    <div id="options-container" style="display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:10px;">
+      ${selectedOptions
+        .map((key, index) => {
+          const textKey = (q as any)[`option_${key.toLowerCase()}`];
+          const imgKey = (q as any)[`option_${key.toLowerCase()}_image`];
+          const letter = String.fromCharCode(65 + index); // A, B, C, D
+          return `
+            <div class="option-btn" data-answer="${key}" 
+              style="cursor:pointer;width:120px;border:2px solid #ccc;border-radius:8px;padding:8px;text-align:center;background:white;transition:0.2s;">
+              ${
+                imgKey
+                  ? `<img src="${imgKey}" style="max-width:80px;max-height:80px;border-radius:6px;margin-bottom:5px;" />`
+                  : ""
+              }
+              <p><b>${letter}.</b> ${textKey || ""}</p>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+
+  await Swal.fire({
+    title: "🧠 Choose the Correct Answer",
+    html: htmlContent,
+    background: "#fff",
+    width: hasImages ? "600px" : "400px",
+    showConfirmButton: false, // ✅ remove default buttons
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    timer: config.question_interval * 1000,
+    timerProgressBar: true,
+    didOpen: () => {
+      // ✅ Add click handler to each option
+      const options = Swal.getPopup()?.querySelectorAll(".option-btn");
+      options?.forEach((el) => {
+        el.addEventListener("click", () => {
+          const playerAnswer = (el as HTMLElement).getAttribute("data-answer") as
+            | "A"
+            | "B"
+            | "C"
+            | "D";
+
+          const correct = playerAnswer === correctKey;
+          updateProgress(correct);
+          Swal.close(); // ✅ close modal immediately
+        });
       });
-
-      let playerAnswer: "A" | "B" | null = null;
-      if (result.isConfirmed) playerAnswer = "A";
-      else if (result.isDenied) playerAnswer = "B";
-
-      const chosenKey = selectedOptions[playerAnswer === "A" ? 0 : 1];
-      const correct = chosenKey === correctKey;
-
-      updateProgress(correct);
-    };
+    },
+  });
+};
 
    /* ---------- Player & Bot Movement ---------- */
 const updateProgress = (playerCorrect: boolean) => {
@@ -357,13 +377,25 @@ const updateProgress = (playerCorrect: boolean) => {
               <VolumeX className="w-6 h-6 cursor-pointer" onClick={() => setMusicOn(true)} />
             )}
             <Menu className="w-7 h-7 cursor-pointer" />
-            <LogOut
+           <LogOut
               onClick={() => {
+                // ✅ Stop the game before logging out
+                setGameActive(false);
+
+                if (questionTimer) clearInterval(questionTimer);
+                if (countdownTimer) clearInterval(countdownTimer);
+
+                if (bgAudio.current) {
+                  bgAudio.current.pause();
+                  bgAudio.current = null;
+                }
+
                 localStorage.clear();
                 router.push("/");
               }}
               className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"
             />
+
           </div>
         </header>
 

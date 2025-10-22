@@ -130,7 +130,7 @@ export default function GameTestPage() {
             <div
               key={i}
               onClick={() => router.push(game.route)}
-              className="relative border-2 border-black rounded-lg shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer bg-white aspect-square flex flex-col justify-between items-center p-3 overflow-hidden"
+              className="w-[140px] h-[140px] sm:w-[160px] sm:h-[160px] border border-black rounded-lg flex flex-col items-center justify-center p-3 text-center bg-white hover:scale-105 hover:shadow-lg transition-all cursor-pointer"
             >
               <div className="text-center">
                 <h3 className="text-md font-bold text-[#7b2020] leading-tight">
@@ -139,15 +139,15 @@ export default function GameTestPage() {
                 <p className="text-gray-600 text-xs">{game.desc}</p>
               </div>
 
-              <div className="flex-1 flex items-center justify-center w-full">
-                <Image
-                  src={game.img}
-                  alt={game.title}
-                  width={100}
-                  height={100}
-                  className="object-contain max-h-[70%]"
-                />
-              </div>
+              <div className="flex items-center justify-center h-[60px] mb-2">
+      <Image
+        src={game.img}
+        alt={game.title}
+        width={55}
+        height={55}
+        className="object-contain"
+      />
+    </div>
             </div>
           ))}
         </div>
