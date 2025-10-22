@@ -4,17 +4,18 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
-import { LogOut, Search, X, Menu, ArrowLeft, Play } from "lucide-react";
+import { LogOut, Search, X, Menu, ArrowLeft, Play, Loader2 } from "lucide-react";
 import io from "socket.io-client";
 
-// ✅ connect to your Render socket server
-const socket = io(
-  process.env.NEXT_PUBLIC_SOCKET_URL || "https://eim-server.onrender.com",
-  {
-    transports: ["websocket"],
-    autoConnect: false,
-  }
-);
+// ✅ Use Render server, force WebSocket for instant connection
+const socket = io("https://eim-server.onrender.com", {
+  transports: ["websocket"],
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000,
+  timeout: 8000, // 8s connect timeout
+  autoConnect: false,
+});
 
 export default function WaitingRoomPage() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export default function WaitingRoomPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [players, setPlayers] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(true); // ⏳ New loading state
 
   const professor = {
     name: "MS. ASH",
@@ -35,51 +37,47 @@ export default function WaitingRoomPage() {
 
   /* 🧠 Connect to socket and join room */
   useEffect(() => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    if (!savedUser.first_name) {
+      router.push("/");
+      return;
+    }
+    setUser(savedUser);
+
+    // 🔹 Show connecting spinner
+    setConnecting(true);
+
+    // 🔹 Establish connection
     socket.connect();
 
     socket.on("connect", () => {
       console.log("✅ Connected to socket:", socket.id);
       setConnected(true);
+      setConnecting(false);
+
+      // Join room immediately after connect
+      socket.emit(
+        "join_room",
+        professor.gameCode,
+        savedUser.first_name,
+        savedUser.avatar || "/resources/avatars/student1.png"
+      );
+    });
+
+    socket.on("connect_error", (err) => {
+      console.warn("⚠️ Socket connect error:", err.message);
+      setConnected(false);
+      setConnecting(true);
+
+      // Retry connection in a few seconds
+      setTimeout(() => socket.connect(), 3000);
     });
 
     socket.on("disconnect", () => {
       console.warn("❌ Disconnected from server");
       setConnected(false);
+      setConnecting(true);
     });
-
-    // 🔹 Load user data safely
-    const stored = localStorage.getItem("user");
-    if (!stored) {
-      console.warn("⚠️ No user found in localStorage");
-      return;
-    }
-
-    let savedUser;
-    try {
-      savedUser = JSON.parse(stored);
-    } catch (err) {
-      console.error("Error parsing user JSON:", err);
-      return;
-    }
-
-    if (!savedUser.first_name) {
-      console.warn("⚠️ Missing first_name in saved user");
-      return;
-    }
-
-    setUser(savedUser);
-
-    // 🔹 Join the room AFTER confirming connection
-    socket.emit(
-      "join_room",
-      professor.gameCode,
-      savedUser.first_name,
-      savedUser.avatar || "/resources/avatars/student1.png"
-    );
-
-    console.log(
-      `📤 Emitted join_room → Room: ${professor.gameCode}, Player: ${savedUser.first_name}`
-    );
 
     // 🔹 Listen for player list updates
     socket.on("update_player_list", (playerArray) => {
@@ -95,7 +93,7 @@ export default function WaitingRoomPage() {
       );
     });
 
-    // 🔹 Listen for game start event
+    // 🔹 Listen for game start
     socket.on("game_started", (playerList) => {
       console.log("🎮 Game started by professor!");
       localStorage.setItem("players", JSON.stringify(playerList));
@@ -105,6 +103,7 @@ export default function WaitingRoomPage() {
     return () => {
       socket.off("connect");
       socket.off("disconnect");
+      socket.off("connect_error");
       socket.off("update_player_list");
       socket.off("game_started");
       socket.disconnect();
@@ -114,7 +113,6 @@ export default function WaitingRoomPage() {
   /* 🟢 Professor starts the game */
   const handleStart = () => {
     if (!players.length) return;
-    console.log("▶️ Professor started the game with:", players);
     localStorage.setItem("players", JSON.stringify(players));
     socket.emit("start_game", professor.gameCode, players);
   };
@@ -156,7 +154,17 @@ export default function WaitingRoomPage() {
     });
   };
 
-  /* 🕒 Loading state */
+  /* 🌀 Show circular loader while connecting */
+  if (connecting) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-white text-gray-700">
+        <Loader2 className="animate-spin w-12 h-12 text-[#7b2020] mb-4" />
+        <p className="font-semibold text-[#7b2020]">Connecting to server...</p>
+        <p className="text-sm text-gray-500 mt-1">Please wait a moment ⏳</p>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-700">
@@ -265,13 +273,13 @@ export default function WaitingRoomPage() {
         </div>
 
         {!connected && (
-          <p className="text-red-600 text-sm mt-2">
-            ⚠️ Not connected to server — check Render URL
+          <p className="text-red-600 text-sm mt-2 animate-pulse">
+            ⚠️ Reconnecting to server...
           </p>
         )}
       </div>
 
-      {/* Lobby Section */}
+      {/* Lobby */}
       <div className="mt-6 w-[90%] max-w-xs bg-[#b22222] rounded-2xl shadow-md flex flex-col items-center py-5">
         <span className="text-white font-bold text-xl mb-3">
           {displayPlayers.length}/8 PLAYERS
@@ -285,11 +293,7 @@ export default function WaitingRoomPage() {
             >
               <div className="bg-blue-100 rounded-full p-1.5 shadow-sm">
                 <Image
-                  src={
-                    p.avatar && p.avatar.trim() !== ""
-                      ? p.avatar
-                      : "/resources/avatars/student1.png"
-                  }
+                  src={p.avatar || "/resources/avatars/student1.png"}
                   alt={p.name || "Player"}
                   width={55}
                   height={55}
@@ -306,10 +310,15 @@ export default function WaitingRoomPage() {
       <div className="flex flex-col items-center gap-3 mt-8">
         <button
           onClick={handleStart}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-8 py-3 rounded-md shadow-md transition-all"
+          disabled={!connected}
+          className={`flex items-center gap-2 px-8 py-3 rounded-md shadow-md transition-all font-semibold ${
+            connected
+              ? "bg-green-600 hover:bg-green-700 text-white"
+              : "bg-gray-400 cursor-not-allowed text-gray-200"
+          }`}
         >
           <Play className="w-5 h-5" />
-          START
+          {connected ? "START" : "CONNECTING..."}
         </button>
 
         <button
