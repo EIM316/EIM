@@ -278,8 +278,8 @@ export default function ChallengeModePage() {
             <Image
               src="/resources/admin/game1.png"
               alt="Hint Icon"
-              width={50}
-              height={35}
+              width={30}
+              height={30}
               className="rounded-full border"
             />
             <span className="text-black text-lg">
