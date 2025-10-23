@@ -11,44 +11,49 @@ interface Player {
   id?: number;
   name: string;
   avatar: string;
-  height: number;
-  isShaking?: boolean;
-  isCorrect?: boolean;
+}
+
+interface EventData {
+  player_name: string;
+  progress: number;
 }
 
 interface Question {
   id: number;
   question: string;
-  option_a: string;
-  option_b: string;
-  option_c?: string;
-  option_d?: string;
   question_image?: string | null;
+
+  option_a: string;
   option_a_image?: string | null;
+
+  option_b: string;
   option_b_image?: string | null;
+
+  option_c?: string;
   option_c_image?: string | null;
+
+  option_d?: string;
   option_d_image?: string | null;
+
   answer: "A" | "B" | "C" | "D";
 }
+
 
 export default function PhaseRush() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [events, setEvents] = useState<EventData[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [config, setConfig] = useState({
-    total_game_time: 60,
-    question_interval: 5,
-    shuffle_mode: true,
-    theme_file: "/resources/music/theme1.mp3",
-  });
+  const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  const [canAnswer, setCanAnswer] = useState(true);
   const [loading, setLoading] = useState(true);
   const [gameActive, setGameActive] = useState(false);
   const [timeLeft, setTimeLeft] = useState(60);
   const [musicOn, setMusicOn] = useState(true);
   const bgAudio = useRef<HTMLAudioElement | null>(null);
+  const [movingBoats, setMovingBoats] = useState<{ [key: string]: boolean }>({});
 
-  // ✅ use the SAME game code as waiting/start
   const gameCode = "5ABC9";
 
   /* ---------- Load User + Connect Supabase ---------- */
@@ -61,20 +66,19 @@ export default function PhaseRush() {
 
     setUser(savedUser);
     joinLobby(savedUser);
-    fetchGameData(savedUser.admin_id || "ADMIN-0001");
+    fetchQuestions();
 
-    // 👥 Realtime player listener
     const channel = supabase
-      .channel("phaselobby-realtime")
+      .channel("phase-events")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "players",
+          table: "game_events",
           filter: `game_code=eq.${gameCode}`,
         },
-        () => refreshPlayers()
+        () => refreshEvents()
       )
       .subscribe();
 
@@ -83,209 +87,207 @@ export default function PhaseRush() {
     };
   }, []);
 
-  /* ---------- Join Lobby (UPSERT fix) ---------- */
+  /* ---------- Join Lobby ---------- */
   const joinLobby = async (savedUser: any) => {
-    try {
-      await supabase.from("players").upsert(
+    await supabase
+      .from("players")
+      .upsert(
         {
           game_code: gameCode,
           name: savedUser.first_name,
           avatar: savedUser.avatar || "/resources/avatars/student1.png",
-          height: 0,
         },
         { onConflict: "game_code,name" }
       );
-      refreshPlayers();
-    } catch (error: any) {
-      console.error("Error joining lobby:", error.message);
-    }
+
+    await supabase
+      .from("game_events")
+      .upsert(
+        { game_code: gameCode, player_name: savedUser.first_name, progress: 0 },
+        { onConflict: "game_code,player_name" }
+      );
+
+    refreshPlayers();
+    refreshEvents();
   };
 
   const refreshPlayers = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("players")
-      .select("*")
+      .select("name,avatar")
       .eq("game_code", gameCode)
       .order("id", { ascending: true });
-
-    if (error) console.error("Error fetching players:", error);
-    else setPlayers(data || []);
+    setPlayers(data || []);
   };
 
-  /* ---------- Fetch Questions + Settings ---------- */
-  const fetchGameData = async (admin_id: string) => {
-    try {
-      setLoading(true);
-      const [res1, settingsRes] = await Promise.allSettled([
-        fetch("/api/gamemode1/list-all"),
-        fetch(`/api/gamemode4/settings/get?admin_id=${admin_id}`),
-      ]);
-
-      const data1 =
-        res1.status === "fulfilled" && res1.value.ok ? await res1.value.json() : [];
-
-      if (settingsRes.status === "fulfilled" && settingsRes.value.ok) {
-        const data = await settingsRes.value.json();
-        setConfig({
-          total_game_time: data.total_game_time ?? 60,
-          question_interval: data.question_interval ?? 5,
-          shuffle_mode: data.shuffle_mode ?? true,
-          theme_file: data.theme_file || "/resources/music/theme1.mp3",
-        });
-        setTimeLeft(data.total_game_time ?? 60);
-      }
-
-      setQuestions(config.shuffle_mode ? shuffle(data1) : data1);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      Swal.fire("Error", "Failed to load questions/settings", "error");
-    } finally {
-      setLoading(false);
-    }
+  const refreshEvents = async () => {
+    const { data } = await supabase
+      .from("game_events")
+      .select("player_name,progress")
+      .eq("game_code", gameCode);
+    setEvents(data || []);
   };
 
-  const shuffle = <T,>(arr: T[]): T[] => {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
+  /* ---------- Fetch Questions ---------- */
+  const fetchQuestions = async () => {
+    setLoading(true);
+    const res = await fetch("/api/gamemode1/list-all");
+    const data = await res.json();
+    setQuestions(data.sort(() => Math.random() - 0.5));
+    setCurrentQuestion(data[0]);
+    setLoading(false);
   };
 
-  /* ---------- Auto Start Game ---------- */
+  /* ---------- Start Game ---------- */
   useEffect(() => {
     if (!loading && questions.length > 0 && user && !gameActive) startGame();
   }, [loading, questions, user]);
 
- const askQuestion = async () => {
-  if (questions.length === 0) return;
-  const q = questions[Math.floor(Math.random() * questions.length)];
-  const correctKey = q.answer;
-
-  const html = `
-    <div style="text-align:center;">
-      ${
-        q.question_image
-          ? `<img src="${q.question_image}" style="max-width:200px;max-height:150px;border-radius:8px;margin-bottom:10px;" />`
-          : ""
-      }
-      <p style="font-size:18px;margin-bottom:10px;">${q.question}</p>
-    </div>
-
-    <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:10px;">
-      ${["A", "B", "C", "D"]
-        .map((key) => {
-          const text = (q as any)[`option_${key.toLowerCase()}`];
-          const img = (q as any)[`option_${key.toLowerCase()}_image`];
-
-          // Each option box
-          return `
-            <div class="option-btn" data-answer="${key}"
-              style="cursor:pointer;width:160px;border:2px solid #ccc;border-radius:8px;padding:10px;text-align:center;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;">
-              <p style="margin:0;font-weight:bold;">${key}.</p>
-              ${
-                img
-                  ? `<img src="${img}" style="max-width:120px;max-height:100px;border-radius:6px;object-fit:contain;" />`
-                  : ""
-              }
-              ${
-                text
-                  ? `<p style="font-size:14px;margin:0;color:#333;">${text}</p>`
-                  : ""
-              }
-            </div>`;
-        })
-        .join("")}
-    </div>
-  `;
-
-  await Swal.fire({
-    title: "🧠 Choose the Correct Answer",
-    html,
-    showConfirmButton: false,
-    allowOutsideClick: false,
-    timer: config.question_interval * 1000,
-    timerProgressBar: true,
-    didOpen: () => {
-      const options = Swal.getPopup()?.querySelectorAll(".option-btn");
-      options?.forEach((el) =>
-        el.addEventListener("click", () => {
-          const ans = (el as HTMLElement).dataset.answer as "A" | "B" | "C" | "D";
-          const correct = ans === correctKey;
-          updateProgress(correct);
-          Swal.close();
-        })
-      );
-    },
-  });
-};
-
-
-  /* ---------- Player Progress ---------- */
-  const updateProgress = async (correct: boolean) => {
-    const maxHeight = 8;
-    setPlayers((prev) =>
-      prev.map((p) => {
-        if (p.name === user.first_name) {
-          let newHeight = p.height;
-          if (correct && p.height < maxHeight) newHeight++;
-          else if (!correct && p.height > 0) newHeight--;
-          supabase
-            .from("players")
-            .update({ height: newHeight })
-            .eq("name", p.name)
-            .eq("game_code", gameCode);
-          return { ...p, height: newHeight, isCorrect: correct, isShaking: !correct };
-        }
-        return p;
-      })
-    );
-  };
-
-  /* ---------- Start Game ---------- */
-  const startGame = () => {
+  const startGame = async () => {
     setGameActive(true);
-    const qTimer = setInterval(() => askQuestion(), config.question_interval * 1000);
-    const cTimer = setInterval(() => {
+    await supabase.from("game_events").update({ progress: 0 }).eq("game_code", gameCode);
+    refreshEvents();
+
+    if (musicOn) {
+      bgAudio.current = new Audio("/resources/music/theme1.mp3");
+      bgAudio.current.loop = true;
+      bgAudio.current.volume = 0.3;
+      bgAudio.current.play();
+    }
+
+    const questionInterval = setInterval(() => nextQuestion(), 5000);
+    const timer = setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
-          clearInterval(qTimer);
-          clearInterval(cTimer);
+          clearInterval(timer);
+          clearInterval(questionInterval);
           endGame();
           return 0;
         }
         return t - 1;
       });
     }, 1000);
-
-    if (musicOn && config.theme_file) {
-      bgAudio.current = new Audio(config.theme_file);
-      bgAudio.current.loop = true;
-      bgAudio.current.volume = 0.3;
-      bgAudio.current.play();
-    }
   };
 
-  const endGame = () => {
-    if (bgAudio.current) bgAudio.current.pause();
-    Swal.fire("🏁 Game Over", "Returning to lobby...", "info").then(() =>
-      router.push("/student/play/classmode")
-    );
+  const nextQuestion = () => {
+    setCanAnswer(true);
+    setCurrentQuestion((prev) => {
+      const idx = questions.findIndex((q) => q.id === prev?.id);
+      return questions[(idx + 1) % questions.length];
+    });
   };
+
+  /* ---------- Handle Answers ---------- */
+  const handleAnswer = async (key: "A" | "B" | "C" | "D") => {
+    if (!currentQuestion || !canAnswer) return;
+    setCanAnswer(false);
+
+    const correct = key === currentQuestion.answer;
+    const currentPlayer = user.first_name;
+    const current = events.find((e) => e.player_name === currentPlayer);
+    const currentProgress = current ? current.progress : 0;
+
+    const newProgress = correct
+      ? Math.min(100, currentProgress + 10)
+      : Math.max(0, currentProgress - 5);
+
+    setMovingBoats((prev) => ({ ...prev, [currentPlayer]: true }));
+
+    await supabase
+      .from("game_events")
+      .update({ progress: newProgress })
+      .eq("game_code", gameCode)
+      .eq("player_name", currentPlayer);
+
+    refreshEvents();
+
+    setTimeout(() => {
+      setMovingBoats((prev) => ({ ...prev, [currentPlayer]: false }));
+    }, 600);
+  };
+
+const endGame = async () => {
+  if (bgAudio.current) bgAudio.current.pause();
+
+  // Fetch final scores
+  const { data: finalScores } = await supabase
+    .from("game_events")
+    .select("player_name,progress")
+    .eq("game_code", gameCode);
+
+  const sorted = (finalScores || [])
+    .sort((a, b) => b.progress - a.progress)
+    .map((p, i) => ({
+      rank: i + 1,
+      name: p.player_name,
+      score: p.progress,
+    }));
+
+  // Show leaderboard
+  await Swal.fire({
+    title: "🏁 Race Over!",
+    html: `
+      <h3>🏆 Final Rankings</h3>
+      ${
+        sorted.length > 0
+          ? sorted
+              .map(
+                (p) =>
+                  `<div style="margin:4px 0;font-weight:600">
+                    ${p.rank === 1 ? "🥇" : p.rank === 2 ? "🥈" : "🥉"} 
+                    ${p.rank}. ${p.name} — ${p.score} pts
+                  </div>`
+              )
+              .join("")
+          : "<p>No data available.</p>"
+      }
+    `,
+    icon: "info",
+    confirmButtonText: "Return to Lobby",
+    confirmButtonColor: "#7b2020",
+  });
+
+  // ✅ Mark this player as "returned"
+  await supabase
+    .from("players")
+    .update({ returned: true })
+    .eq("game_code", gameCode)
+    .eq("name", user.first_name);
+
+  // Check if all players have returned
+  const { data: check } = await supabase
+    .from("players")
+    .select("returned")
+    .eq("game_code", gameCode);
+
+  const allReturned = check?.every((p) => p.returned === true);
+
+  if (allReturned) {
+    // ✅ Now cleanup after everyone has returned
+    await supabase.from("game_events").delete().eq("game_code", gameCode);
+    await supabase.from("players").delete().eq("game_code", gameCode);
+    await supabase.from("game_state").delete().eq("game_code", gameCode);
+  }
+
+  // Return player to lobby
+  router.push("/student/play/classmode");
+};
+
 
   /* ---------- UI ---------- */
   if (loading)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-gray-700">
         <Loader2 className="animate-spin w-10 h-10 mb-4 text-[#7b2020]" />
-        <p>Loading game data...</p>
+        <p>Loading Phase Rush...</p>
       </div>
     );
 
+  const getProgress = (name: string) =>
+    events.find((e) => e.player_name === name)?.progress || 0;
+
   return (
-    <div className="flex flex-col items-center min-h-screen bg-white">
-      {/* HEADER */}
+    <div className="flex flex-col items-center min-h-screen bg-gradient-to-b from-gray-100 to-gray-300">
       <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md">
         <div className="flex items-center space-x-3">
           <Image
@@ -295,109 +297,141 @@ export default function PhaseRush() {
             height={40}
             className="rounded-full border-2 border-white"
           />
-          <span className="font-semibold text-lg">{user?.first_name?.toUpperCase()}</span>
+          <span className="font-semibold text-lg">
+            {user?.first_name?.toUpperCase()}
+          </span>
         </div>
         <div className="flex items-center gap-3">
           {musicOn ? (
-            <Volume2 className="w-6 h-6 cursor-pointer" onClick={() => setMusicOn(false)} />
+            <Volume2
+              className="w-6 h-6 cursor-pointer"
+              onClick={() => setMusicOn(false)}
+            />
           ) : (
-            <VolumeX className="w-6 h-6 cursor-pointer" onClick={() => setMusicOn(true)} />
+            <VolumeX
+              className="w-6 h-6 cursor-pointer"
+              onClick={() => setMusicOn(true)}
+            />
           )}
           <Menu className="w-7 h-7 cursor-pointer" />
-          <LogOut onClick={() => router.push("/")} className="w-6 h-6 cursor-pointer" />
+          <LogOut
+            onClick={() => router.push("/")}
+            className="w-6 h-6 cursor-pointer"
+          />
         </div>
       </header>
 
-      {/* GAME BOARD */}
       <main className="flex flex-col items-center w-full max-w-5xl mt-4">
         <h2 className="text-xl font-bold text-[#7b2020]">⚡ Phase Rush</h2>
         <p className="text-gray-600 mb-3">Time Left: {timeLeft}s</p>
 
+        {/* Race Field */}
         <div
-          className="flex justify-around items-end w-full bg-gradient-to-t from-gray-900 to-gray-700 rounded-lg border border-gray-400 p-3 relative"
-          style={{ height: "calc(100vh - 200px)" }}
+          className="relative w-full rounded-lg border border-[#7b2020] overflow-hidden"
+          style={{
+  height: "220px",
+  backgroundImage: "url('/resources/modes/waterbg.gif')",
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+  backgroundRepeat: "no-repeat",
+}}
+
         >
-          {players.length === 0 ? (
-            <p className="text-white text-sm animate-pulse">Waiting for players...</p>
-          ) : (
-            players.map((p, i) => {
-              const blockHeight = 20;
-              const translateY = -(p.height * blockHeight);
-              return (
-                <div key={i} className="flex flex-col items-center h-full w-20 relative">
-                  {/* BOX STACK */}
-                  <div className="absolute bottom-12 flex flex-col items-center justify-end">
-                    {Array.from({ length: p.height }).map((_, idx) => (
-                      <Image
-                        key={idx}
-                        src="/resources/modes/boxes.png"
-                        alt="box"
-                        width={45}
-                        height={blockHeight}
-                        unoptimized
-                      />
-                    ))}
-                  </div>
+          <div className="absolute inset-0 bg-blue-500/20"></div> {/* adds a faint water overlay */}
 
-                  {/* AVATAR */}
-                  <div
-                    className={`relative flex flex-col items-center transition-all duration-500 ${
-                      p.isShaking ? "shake red-flash" : ""
-                    } ${p.isCorrect ? "correct-glow" : ""}`}
-                    style={{ transform: `translateY(${translateY}px)` }}
-                  >
-                    <Image
-                      src={p.avatar || "/resources/avatars/student1.png"}
-                      alt={p.name}
-                      width={55}
-                      height={55}
-                      className="rounded-full ring-4 ring-[#b22222]/70 shadow-md bg-white"
-                      unoptimized
-                    />
-                    <span className="mt-1 text-xs font-bold text-white bg-[#7b2020]/80 px-2 rounded-full">
-                      {p.name}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
-          )}
+
+          <div className="absolute right-12 top-0 bottom-0 w-2 bg-yellow-400"></div>
+
+          {players.map((p, i) => (
+            <div key={i} className="absolute" style={{ top: `${50 + i * 60}px` }}>
+              <div
+                className="transition-all duration-500 ease-in-out"
+                style={{ transform: `translateX(${getProgress(p.name) * 3}px)` }}
+              >
+                <Image
+                  src={
+                    movingBoats[p.name]
+                      ? "/resources/modes/boat2.png"
+                      : "/resources/modes/boat1.png"
+                  }
+                  alt={p.name}
+                  width={60}
+                  height={60}
+                  className="drop-shadow-[0_3px_4px_rgba(0,0,0,0.6)] transition-all duration-300"
+                  unoptimized
+                />
+                <p className="text-xs text-center text-white bg-[#7b2020]/80 rounded-full mt-1 px-2">
+                  {p.name}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
-      </main>
 
-      {/* STYLES */}
-      <style jsx>{`
-        .shake {
-          animation: shake 0.4s ease-in-out;
-        }
-        @keyframes shake {
-          0%,
-          100% {
-            transform: translateX(0);
+{currentQuestion && (
+  <div className="w-full max-w-4xl mt-6 bg-white border border-[#7b2020] rounded-lg p-4 sm:p-5 shadow-md">
+    {/* 🧠 Question */}
+    <div className="flex flex-col items-center text-center mb-3 sm:mb-4">
+      {currentQuestion.question_image && (
+        <Image
+          src={
+            currentQuestion.question_image.startsWith("http")
+              ? currentQuestion.question_image
+              : `/resources/questions/${currentQuestion.question_image}`
           }
-          25% {
-            transform: translateX(-5px);
-          }
-          75% {
-            transform: translateX(5px);
-          }
-        }
-        .red-flash {
-          filter: brightness(1.4) saturate(2) hue-rotate(-20deg);
-        }
-        .correct-glow {
-          box-shadow: 0 0 20px 6px rgba(34, 197, 94, 0.7);
-          animation: glowFade 0.6s ease-out forwards;
-        }
-        @keyframes glowFade {
-          0% {
-            box-shadow: 0 0 20px 6px rgba(34, 197, 94, 0.7);
-          }
-          100% {
-            box-shadow: none;
-          }
-        }
-      `}</style>
+          alt="Question"
+          width={250}
+          height={160}
+          className="rounded-md border border-gray-300 object-contain max-h-36 sm:max-h-48 mb-3"
+          unoptimized
+        />
+      )}
+      <h3 className="text-base sm:text-lg font-semibold text-[#7b2020] leading-snug">
+        {currentQuestion.question}
+      </h3>
+    </div>
+
+    {/* 🧩 Answer Options */}
+    <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3">
+      {["A", "B", "C", "D"].map((key) => {
+        const textKey = (currentQuestion as any)[`option_${key.toLowerCase()}`];
+        const imgKey = (currentQuestion as any)[`option_${key.toLowerCase()}_image`];
+        if (!textKey && !imgKey) return null;
+
+        return (
+          <button
+            key={key}
+            disabled={!canAnswer}
+            onClick={() => handleAnswer(key as any)}
+            className={`flex flex-col items-center justify-center border-2 border-[#7b2020] rounded-lg p-2 sm:p-3 bg-white transition-all ${
+              canAnswer ? "hover:bg-[#ffb4a2]" : "opacity-50"
+            }`}
+          >
+            <p className="font-bold text-[#7b2020] text-sm sm:text-base mb-1">{key}.</p>
+
+            {imgKey && (
+              <Image
+                src={imgKey.startsWith("http") ? imgKey : `/resources/questions/${imgKey}`}
+                alt={`Option ${key}`}
+                width={100}
+                height={100}
+                className="rounded-md border border-gray-300 object-contain max-h-24 sm:max-h-32 mb-1"
+                unoptimized
+                onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+              />
+            )}
+
+            {textKey && (
+              <p className="text-xs sm:text-sm text-gray-700 text-center">{textKey}</p>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+)}
+
+      </main>
     </div>
   );
 }
