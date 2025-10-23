@@ -181,7 +181,8 @@ export default function TeacherPage() {
             <p className="text-gray-700 font-medium px-4">
               Your class list is empty.{" "}
               <span className="text-[#7b2020]">
-                Create a new class to start managing students, lessons, and progress.
+                Create a new class to start managing students, lessons, and
+                progress.
               </span>
             </p>
           </div>
@@ -201,8 +202,13 @@ export default function TeacherPage() {
 
             <label className="block mb-2 font-semibold">Class Code</label>
             <div className="flex items-center bg-white rounded-md px-3 py-2 mb-4">
-              <span className="text-black font-semibold flex-1">{classCode}</span>
-              <Copy onClick={copyCode} className="text-black cursor-pointer w-5 h-5 ml-2" />
+              <span className="text-black font-semibold flex-1">
+                {classCode}
+              </span>
+              <Copy
+                onClick={copyCode}
+                className="text-black cursor-pointer w-5 h-5 ml-2"
+              />
             </div>
 
             <button
@@ -221,10 +227,14 @@ export default function TeacherPage() {
             {classList.map((cls) => (
               <div
                 key={cls.id}
-                className="bg-[#7b2020] text-white rounded-2xl aspect-square flex flex-col justify-center items-center relative shadow-md"
+               onClick={() => router.push(`/teacher/class?class_id=${cls.id}`)}
+
+                className="bg-[#7b2020] text-white rounded-2xl aspect-square flex flex-col justify-center items-center relative shadow-md cursor-pointer hover:bg-[#8b2a2a] transition-all"
               >
                 <Settings className="absolute top-3 right-3 cursor-pointer" />
-                <h2 className="text-lg font-bold text-center px-2">{cls.name}</h2>
+                <h2 className="text-lg font-bold text-center px-2">
+                  {cls.name}
+                </h2>
                 <div className="flex items-center justify-center gap-2 mt-2 text-sm">
                   <Users className="w-5 h-5" /> {cls.students}
                 </div>

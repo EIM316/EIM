@@ -21,8 +21,6 @@ export default function ClassModePage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const HARDCODED_CODE = "5ABC9"; // 🔹 for now, hardcoded code reference
-
   // ✅ Load student data
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
@@ -36,30 +34,37 @@ export default function ClassModePage() {
     setUser(JSON.parse(savedUser));
   }, [router]);
 
-  // ✅ Handle join game
-  const handleJoinGame = () => {
+  // ✅ Handle join game (database validation)
+  const handleJoinGame = async () => {
     if (!gameCode.trim()) {
       Swal.fire("Error", "Please enter a game code.", "error");
       return;
     }
 
     setJoining(true);
+    try {
+      const res = await fetch(`/api/classmode/validate?code=${gameCode.trim().toUpperCase()}`);
+      const data = await res.json();
 
-    setTimeout(() => {
-      if (gameCode.trim().toUpperCase() === HARDCODED_CODE) {
+      if (data.success && data.game) {
         Swal.fire({
           title: "Joined Game!",
-          text: "You successfully joined the match lobby.",
+          text: `Welcome to ${data.game.game_type.replace("_", " ").toUpperCase()} lobby.`,
           icon: "success",
           confirmButtonColor: "#7b2020",
         }).then(() => {
-          router.push("/student/play/classmode/waitingroom"); // 🔹 redirect placeholder
+          localStorage.setItem("activeGameCode", data.game.game_code);
+          localStorage.setItem("activeGameType", data.game.game_type);
+          router.push(`/student/play/classmode/waitingroom?code=${data.game.game_code}`);
         });
       } else {
         Swal.fire("Error", "Invalid or expired game code.", "error");
       }
+    } catch (err) {
+      Swal.fire("Error", "Failed to connect to game server.", "error");
+    } finally {
       setJoining(false);
-    }, 800);
+    }
   };
 
   // ✅ Logout
@@ -157,8 +162,7 @@ export default function ClassModePage() {
             Enter Game Code
           </h2>
           <p className="text-gray-700 mb-6 px-4">
-            Join a multiplayer match created by your professor.  
-            (Try <b>{HARDCODED_CODE}</b> for now.)
+            Join a multiplayer match created by your professor.
           </p>
 
           <input

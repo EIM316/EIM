@@ -35,6 +35,7 @@ model Teacher {
   avatar     String?   @db.VarChar(255)
   created_at DateTime? @default(now()) @db.Timestamp(6)
   classes    Class[]   @relation("TeacherClasses")
+  class_modes ClassModeGame[]
 
   @@map("teacher")
   @@schema("eim")
@@ -62,7 +63,7 @@ model Class {
   updated_at      DateTime?      @default(now()) @db.Timestamp(6)
   teacher         Teacher        @relation("TeacherClasses", fields: [teacher_id], references: [id_number], onDelete: NoAction, onUpdate: NoAction)
   student_classes StudentClass[]
-
+  class_modes ClassModeGame[]
   @@map("class")
   @@schema("eim")
 }
@@ -265,3 +266,19 @@ model Gamemode4Settings {
   @@schema("eim")
 }
 
+model ClassModeGame {
+  id          Int       @id @default(autoincrement())
+  class_id    Int
+  teacher_id  String    @db.VarChar(50)
+  game_code   String    @unique @db.VarChar(10)
+  game_type   String    @db.VarChar(50)
+  status      String    @default("active") @db.VarChar(20)
+  created_at  DateTime  @default(now()) @db.Timestamp(6)
+  expires_at  DateTime? @db.Timestamp(6)
+
+  class   Class   @relation(fields: [class_id], references: [id], onDelete: Cascade, map: "fk_classmode_class")
+  teacher Teacher @relation(fields: [teacher_id], references: [id_number], onDelete: Cascade, map: "fk_classmode_teacher")
+
+  @@map("class_mode_game")
+  @@schema("eim")
+}

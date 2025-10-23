@@ -1,29 +1,24 @@
-// waitingroom/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Swal from "sweetalert2";
 import { LogOut, Search, Menu, ArrowLeft, Play, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function WaitingRoomPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [user, setUser] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
+  const [gameCode, setGameCode] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(true);
+  const [professorInfo, setProfessorInfo] = useState<any>(null);
 
-  const professor = {
-    name: "MS. ASH",
-    avatar: "/resources/avatars/prof.png",
-    gameCode: "5ABC9",
-    items: 20,
-    duration: "5 MINUTES",
-    hintAllowed: true,
-  };
-
+  // ✅ Load user + game code
   useEffect(() => {
     const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
     if (!savedUser.id_number) {
@@ -31,24 +26,54 @@ export default function WaitingRoomPage() {
       return;
     }
 
+    const urlCode = searchParams.get("code");
+    const storedCode = localStorage.getItem("activeGameCode");
+
+    const codeToUse = urlCode || storedCode;
+
+    if (!codeToUse) {
+      Swal.fire("Error", "No active game found.", "error").then(() =>
+        router.push("/student/play/classmode")
+      );
+      return;
+    }
+
     setUser(savedUser);
+    setGameCode(codeToUse.toUpperCase());
+  }, [router, searchParams]);
+
+  // ✅ Join lobby & listen for events
+  useEffect(() => {
+    if (!gameCode || !user) return;
+
     setConnecting(true);
 
     const joinLobby = async () => {
       try {
+        // Upsert player into Supabase lobby
         await supabase.from("players").upsert(
           {
-            id_number: savedUser.id_number,
-            game_code: professor.gameCode,
-            name: savedUser.first_name,
-            avatar: savedUser.avatar || "/resources/avatars/student1.png",
+            id_number: user.id_number,
+            game_code: gameCode,
+            name: user.first_name,
+            avatar: user.avatar || "/resources/avatars/student1.png",
           },
           { onConflict: "game_code,id_number" }
         );
 
         setConnected(true);
         setConnecting(false);
-        refreshPlayers();
+        await refreshPlayers();
+
+        // Optionally fetch professor data (if available via backend)
+        const res = await fetch(`/api/classmode/validate?code=${gameCode}`);
+        const data = await res.json();
+        if (data.success) {
+          setProfessorInfo({
+            name: data.game.teacher_id || "PROFESSOR",
+            game_type: data.game.game_type.replace("_", " ").toUpperCase(),
+          });
+        }
       } catch (err: any) {
         console.error("❌ Join Lobby Error:", err.message);
         setConnecting(false);
@@ -59,13 +84,13 @@ export default function WaitingRoomPage() {
       const { data, error } = await supabase
         .from("players")
         .select("*")
-        .eq("game_code", professor.gameCode)
+        .eq("game_code", gameCode)
         .order("id", { ascending: true });
 
       if (!error) setPlayers(data || []);
     };
 
-    // realtime players (filter inside handler)
+    // realtime players
     const playerChannel = supabase
       .channel("players-realtime")
       .on(
@@ -73,12 +98,12 @@ export default function WaitingRoomPage() {
         { event: "*", schema: "public", table: "players" },
         (payload) => {
           const row = payload.new as any;
-          if (row?.game_code === professor.gameCode) refreshPlayers();
+          if (row?.game_code === gameCode) refreshPlayers();
         }
       )
       .subscribe();
 
-    // listen for start events filtered by game_code
+    // listen for start events filtered by this game code
     const gameChannel = supabase
       .channel("game-state-realtime")
       .on(
@@ -87,13 +112,13 @@ export default function WaitingRoomPage() {
           event: "INSERT",
           schema: "public",
           table: "game_state",
-          filter: `game_code=eq.${professor.gameCode}`,
+          filter: `game_code=eq.${gameCode}`,
         },
         (payload) => {
           const game = payload.new as any;
           if (game?.event_type === "game_started") {
             console.log("🎮 Game started broadcast received!");
-            router.push("/student/play/classmode/waitingroom/start");
+            router.push(`/student/play/classmode/waitingroom/start?code=${gameCode}`);
           }
         }
       )
@@ -105,49 +130,16 @@ export default function WaitingRoomPage() {
       supabase.removeChannel(playerChannel);
       supabase.removeChannel(gameChannel);
     };
-  }, [router]);
+  }, [gameCode, user, router]);
 
-  const leaveLobby = async (userData: any) => {
-    if (!userData?.id_number) return;
+  // ✅ Leave lobby handler (optional)
+  const leaveLobby = async () => {
+    if (!user?.id_number || !gameCode) return;
     await supabase
       .from("players")
       .delete()
-      .eq("game_code", professor.gameCode)
-      .eq("id_number", userData.id_number);
-  };
-
-  const handleStart = async () => {
-    if (!players.length) return;
-
-    try {
-      // reset progress for all players (starter only)
-      await supabase.from("game_events").update({ progress: 0 }).eq("game_code", professor.gameCode);
-
-      // insert a single start signal for this game_code
-      const { data, error } = await supabase
-        .from("game_state")
-        .insert([{ game_code: professor.gameCode, event_type: "game_started" }])
-        .select();
-
-      if (error) {
-        console.error("❌ Start error:", error.message);
-        Swal.fire("Error", "Failed to start the game!", "error");
-      } else {
-        console.log("🎮 Game start broadcasted to all!", data);
-        Swal.fire({
-          title: "Started!",
-          text: "Game is starting for everyone...",
-          icon: "success",
-          timer: 800,
-          showConfirmButton: false,
-        }).then(() => {
-          router.push("/student/play/classmode/waitingroom/start");
-        });
-      }
-    } catch (err: any) {
-      console.error("❌ Exception:", err.message);
-      Swal.fire("Error", "Something went wrong!", "error");
-    }
+      .eq("game_code", gameCode)
+      .eq("id_number", user.id_number);
   };
 
   if (connecting) {
@@ -160,7 +152,7 @@ export default function WaitingRoomPage() {
     );
   }
 
-  if (!user)
+  if (!user || !gameCode)
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-700">
         Loading lobby...
@@ -180,11 +172,15 @@ export default function WaitingRoomPage() {
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-white relative">
+      {/* Header */}
       <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md">
         <div className="flex items-center space-x-3">
           <ArrowLeft
             className="w-6 h-6 cursor-pointer hover:text-gray-300"
-            onClick={() => router.back()}
+            onClick={() => {
+              leaveLobby();
+              router.push("/student/play/classmode");
+            }}
           />
           <Image
             src={
@@ -205,39 +201,33 @@ export default function WaitingRoomPage() {
           <Search className="w-6 h-6 cursor-pointer hover:text-gray-300" />
           <Menu className="w-7 h-7 cursor-pointer" />
           <LogOut
-            onClick={() => router.push("/")}
+            onClick={() => {
+              leaveLobby();
+              router.push("/");
+            }}
             className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"
           />
         </div>
       </header>
 
+      {/* Game Info */}
       <div className="flex flex-col items-center w-full mt-6">
-        <Image
-          src={professor.avatar}
-          alt="Professor"
-          width={70}
-          height={70}
-          className="rounded-full border-2 border-[#7b2020] mb-2"
-        />
-        <span className="font-bold text-lg text-[#7b2020] mb-2">
-          {professor.name}
+        <span className="font-bold text-lg text-[#7b2020]">
+          {professorInfo?.name || "CLASS LOBBY"}
         </span>
-
-        <div className="bg-green-500 text-white rounded-md px-5 py-3 text-center text-sm shadow-md">
-          <div className="font-bold text-base mb-1">CLASS MODE: {professor.gameCode}</div>
-          <div className="flex flex-col items-center gap-0.5">
-            <span>
-              {professor.items} ITEMS | {professor.duration}
-            </span>
-            <span className="text-xs bg-white text-green-700 rounded-md px-2 py-0.5 mt-1">
-              {professor.hintAllowed ? "HINT ALLOWED" : "NO HINTS"}
-            </span>
-          </div>
+        <div className="text-gray-600 text-sm mt-1">
+          GAME CODE: <b>{gameCode}</b>
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+          {professorInfo?.game_type || "WAITING FOR GAME INFO..."}
         </div>
       </div>
 
-      <div className="mt-6 w-[90%] max-w-xs bg-[#b22222] rounded-2xl shadow-md flex flex-col items-center py-5">
-        <span className="text-white font-bold text-xl mb-3">{displayPlayers.length}/8 PLAYERS</span>
+      {/* Player Grid */}
+      <div className="mt-8 w-[90%] max-w-xs bg-[#b22222] rounded-2xl shadow-md flex flex-col items-center py-5">
+        <span className="text-white font-bold text-xl mb-3">
+          {displayPlayers.length}/8 PLAYERS
+        </span>
         <div className="grid grid-cols-3 gap-4">
           {displayPlayers.map((p, i) => (
             <div key={i} className="flex flex-col items-center justify-center text-white">
@@ -256,17 +246,11 @@ export default function WaitingRoomPage() {
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-3 mt-8">
-        <button
-          onClick={handleStart}
-          disabled={!connected}
-          className={`flex items-center gap-2 px-8 py-3 rounded-md shadow-md transition-all font-semibold ${
-            connected ? "bg-green-600 hover:bg-green-700 text-white" : "bg-gray-400 cursor-not-allowed text-gray-200"
-          }`}
-        >
-          <Play className="w-5 h-5" />
-          {connected ? "START" : "CONNECTING..."}
-        </button>
+      {/* Waiting Notice */}
+      <div className="flex flex-col items-center mt-8 text-gray-700">
+        <p className="text-sm font-medium">
+          Waiting for the professor to start the game...
+        </p>
       </div>
     </div>
   );
