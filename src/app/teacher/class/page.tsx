@@ -17,8 +17,10 @@ export default function ProfessorClassPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [selectedMode, setSelectedMode] = useState("");
+  const [selectedMode, setSelectedMode] = useState("Phase Rush");
   const [gameCode, setGameCode] = useState("");
+  const [records, setRecords] = useState<any[]>([]);
+
 
   // ✅ Load teacher info
   const [user, setUser] = useState<any>(null);
@@ -30,31 +32,33 @@ export default function ProfessorClassPage() {
     }
   }, []);
 
-  // ✅ Fetch class info + students + games
   const fetchAllData = async () => {
-    if (!classId) return;
-    try {
-      setLoading(true);
+  if (!classId) return;
+  try {
+    setLoading(true);
 
-      const [classRes, studentRes, gameRes] = await Promise.all([
-        fetch(`/api/class/info?class_id=${classId}`),
-        fetch(`/api/class/students?class_id=${classId}`),
-        fetch(`/api/classmode/list?class_id=${classId}`),
-      ]);
+    const [classRes, studentRes, gameRes, recordRes] = await Promise.all([
+      fetch(`/api/class/info?class_id=${classId}`),
+      fetch(`/api/class/students?class_id=${classId}`),
+      fetch(`/api/classmode/list?class_id=${classId}`),
+      fetch(`/api/classmode/records/get?class_id=${classId}`), // ✅ new
+    ]);
 
-      const classData = await classRes.json();
-      const studentData = await studentRes.json();
-      const gameData = await gameRes.json();
+    const classData = await classRes.json();
+    const studentData = await studentRes.json();
+    const gameData = await gameRes.json();
+    const recordData = await recordRes.json();
 
-      if (classData.success) setClassInfo(classData.class);
-      if (studentData.success) setStudents(studentData.students);
-      if (gameData.success) setGames(gameData.games || []);
-    } catch (err) {
-      console.error("Error fetching data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (classData.success) setClassInfo(classData.class);
+    if (studentData.success) setStudents(studentData.students);
+    if (gameData.success) setGames(gameData.games || []);
+    if (recordData.success) setRecords(recordData.records || []);
+  } catch (err) {
+    console.error("Error fetching data:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchAllData();
@@ -231,10 +235,27 @@ const goToLobby = (game: any) => {
         </div>
       </section>
 
+      {/* ✅ NEW CLASS PROGRESS SECTION */}
+<section className="w-[90%] max-w-md mt-6 relative">
+  <h2 className="text-[#7b2020] font-bold text-base mb-2">
+    CLASS PROGRESS
+  </h2>
+
+  <div className="border-2 border-[#7b2020] rounded-lg bg-[#f8e8e8] p-5 flex flex-col justify-center items-center relative min-h-[200px]">
+    {/* Placeholder for line chart */}
+    <p className="text-sm text-gray-700 font-medium text-center mb-2">
+      No data yet.
+    </p>
+    <div className="w-full h-[150px] flex justify-center items-center bg-white border border-dashed border-[#7b2020]/50 rounded-md">
+      <span className="text-gray-400 text-xs">[ Line Graph Placeholder ]</span>
+    </div>
+  </div>
+</section>
+
       {/* Class Mode Records */}
       <section className="w-[90%] max-w-md mt-6 relative">
         <h2 className="text-[#7b2020] font-bold text-base mb-2">
-          CLASS MODE RECORDS
+          CLASS MODE LOBBY
         </h2>
 
         <div className="border-2 border-[#7b2020] rounded-lg bg-[#f8e8e8] p-5 flex flex-col justify-center items-center relative min-h-[200px]">
@@ -287,6 +308,65 @@ const goToLobby = (game: any) => {
         </div>
       </section>
 
+{/* 🏁 CLASS MODE RECORDS */}
+<section className="w-[90%] max-w-md mt-6 relative">
+  <h2 className="text-[#7b2020] font-bold text-base mb-2">CLASS MODE RECORDS</h2>
+
+  <div className="border-2 border-[#7b2020] rounded-lg bg-[#f8e8e8] p-5 flex flex-col relative min-h-[200px]">
+    {records.length > 0 ? (
+      <div className="w-full max-h-[250px] overflow-y-auto">
+        <table className="w-full text-left border-collapse">
+          <thead className="sticky top-0 bg-[#7b2020] text-white text-sm">
+            <tr>
+              <th className="p-2 pl-3">Game Code</th>
+              <th className="p-2 text-center pr-3">Date</th>
+              <th className="p-2 text-right pr-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* ✅ Extract unique game codes */}
+            {Array.from(
+              new Map(
+                records.map((r) => [r.game_code, r])
+              ).values()
+            ).map((rec) => (
+              <tr
+                key={rec.game_code}
+                className="border-b border-[#7b2020]/30 hover:bg-[#f3dada] transition-all cursor-pointer"
+                onClick={() =>
+                  router.push(
+                    `/teacher/class/records?code=${rec.game_code}&class_id=${classId}`
+                  )
+                }
+              >
+                <td className="p-2 pl-3 text-sm font-semibold text-[#7b2020]">
+                  {rec.game_code}
+                </td>
+                <td className="p-2 text-center text-xs text-gray-600">
+                  {new Date(rec.created_at).toLocaleDateString()}{" "}
+                  {new Date(rec.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </td>
+                <td className="p-2 text-right pr-3 text-[#7b2020] font-semibold">
+                  →
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <p className="text-sm text-gray-700 font-medium text-center">
+        NO CLASS MODE RECORDS YET
+      </p>
+    )}
+  </div>
+</section>
+
+
+
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex justify-center items-center z-50">
@@ -302,20 +382,16 @@ const goToLobby = (game: any) => {
               Create Class Game
             </h2>
 
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Select Game Mode
-            </label>
-            <select
-              value={selectedMode}
-              onChange={(e) => setSelectedMode(e.target.value)}
-              className="w-full border-2 border-[#7b2020] rounded-md p-2 text-sm mb-4 text-black"
-            >
-              <option value="">-- Choose a Game Mode --</option>
-              <option value="Phase Rush">Phase Rush</option>
-              <option value="Quiz Mode">Quiz Mode</option>
-              <option value="Schematic">Schematic</option>
-              <option value="Randomized">Randomized</option>
-            </select>
+           <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Game Mode
+              </label>
+              <input
+                type="text"
+                value="Phase Rush"
+                readOnly
+                className="w-full border-2 border-[#7b2020] rounded-md p-2 text-sm mb-4 text-gray-700 bg-[#f8e8e8] cursor-not-allowed select-none"
+              />
+
 
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Game Code
