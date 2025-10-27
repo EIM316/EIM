@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
-import ProfessorClassPage from "./professorclasspage";
+import ProfessorClassPage from "./ProfessorClassPage";
 
 export default function Page() {
   return (
