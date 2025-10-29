@@ -16,7 +16,7 @@ export default function StartPage() {
   const [gameCode, setGameCode] = useState<string>("XXXX"); // ✅ safe storage for code
 
   const mode = "Phase Rush";
-  const modePath = "/student/play/classmode/gamemodes/phaserush";
+  const modePath = "/classmode/gamemodes/phaserush";
 
   /* ---------------- Load game code safely ---------------- */
   useEffect(() => {
