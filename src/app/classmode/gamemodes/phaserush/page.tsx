@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Menu, LogOut, Volume2, VolumeX, Loader2 } from "lucide-react";
 import Swal from "sweetalert2";
+import { Menu, LogOut, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 /* ---------- Interfaces ---------- */
@@ -17,6 +17,9 @@ interface Player {
 interface EventData {
   player_name: string;
   progress: number;
+  score?: number;
+  is_correct?: boolean;
+  updated_at?: string;
 }
 
 interface Question {
@@ -45,12 +48,15 @@ export default function PhaseRush() {
   const [canAnswer, setCanAnswer] = useState(true);
   const [loading, setLoading] = useState(true);
   const [gameActive, setGameActive] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(0);
   const [musicOn, setMusicOn] = useState(true);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [movingBoats, setMovingBoats] = useState<{ [key: string]: boolean }>({});
   const [settings, setSettings] = useState<any>(null);
-  const bgAudio = useRef<HTMLAudioElement | null>(null);
   const [gameCode, setGameCode] = useState<string>("");
+
+  const bgAudio = useRef<HTMLAudioElement | null>(null);
+  const questionInterval = useRef<NodeJS.Timeout | null>(null);
+  const timerInterval = useRef<NodeJS.Timeout | null>(null);
 
   /* ---------- Load Player & Fetch Settings ---------- */
   useEffect(() => {
@@ -65,9 +71,16 @@ export default function PhaseRush() {
     setUser(savedUser);
     setGameCode(code);
     fetchSettings(code, savedUser);
+
+    return () => {
+      supabase.getChannels().forEach((c) => supabase.removeChannel(c));
+      if (bgAudio.current) bgAudio.current.pause();
+      if (questionInterval.current) clearInterval(questionInterval.current);
+      if (timerInterval.current) clearInterval(timerInterval.current);
+    };
   }, [router]);
 
-  /* ---------- Fetch Professor Game Settings ---------- */
+  /* ---------- Fetch Game Settings ---------- */
   const fetchSettings = async (code: string, savedUser: any) => {
     try {
       const { data, error } = await supabase
@@ -97,42 +110,87 @@ export default function PhaseRush() {
     }
   };
 
-  /* ---------- Join Supabase Lobby ---------- */
-  const joinLobby = async (savedUser: any, code: string) => {
-    if (!savedUser) return;
+/* ---------- Join Lobby ---------- */
+const joinLobby = async (savedUser: any, code: string) => {
+  try {
+    // ✅ Fetch the class or game info to get the professor_id
+    const { data: classData, error: classErr } = await supabase
+      .from("class")
+      .select("professor_id")
+      .eq("game_code", code)
+      .maybeSingle();
 
-    await supabase
+    if (classErr) console.error("⚠️ Error fetching class professor:", classErr);
+
+    // ✅ Update localStorage user with professor_id (so it's never missing)
+    if (classData?.professor_id) {
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          ...savedUser,
+          professor_id: classData.professor_id, // 🧠 Inject here
+        })
+      );
+      console.log("✅ professor_id added to localStorage:", classData.professor_id);
+    }
+
+    // ✅ 1. Make sure the player exists
+    const { error: playerErr } = await supabase
       .from("players")
       .upsert(
         {
           game_code: code,
           name: savedUser.first_name,
           avatar: savedUser.avatar || "/resources/avatars/student1.png",
+          progress: 0,
+          score: 0,
+          is_active: true,
         },
         { onConflict: "game_code,name" }
       );
+    if (playerErr) console.error("⚠️ Player upsert failed:", playerErr);
 
-    await supabase
+    // ✅ 2. Check if the player has an existing event
+    const { data: eventData, error: checkErr } = await supabase
       .from("game_events")
-      .upsert(
-        { game_code: code, player_name: savedUser.first_name, progress: 0 },
-        { onConflict: "game_code,player_name" }
-      );
+      .select("id")
+      .eq("game_code", code)
+      .eq("player_name", savedUser.first_name)
+      .maybeSingle();
 
+    if (checkErr) console.error("⚠️ Event check failed:", checkErr);
+
+    // ✅ 3. Insert new if missing
+    if (!eventData) {
+      const { error: insertErr } = await supabase.from("game_events").insert({
+        game_code: code,
+        player_name: savedUser.first_name,
+        progress: 0,
+        score: 0,
+        is_correct: false,
+        updated_at: new Date().toISOString(),
+      });
+      if (insertErr) console.error("❌ Error inserting new game event:", insertErr);
+    }
+
+    // ✅ 4. Refresh UI
     refreshPlayers(code);
     refreshEvents(code);
 
-    const channel = supabase
-      .channel("phase-events")
+    // ✅ 5. Realtime listener
+    supabase
+      .channel(`phase-events-${code}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_events", filter: `game_code=eq.${code}` },
         () => refreshEvents(code)
       )
       .subscribe();
+  } catch (err) {
+    console.error("❌ Error in joinLobby:", err);
+  }
+};
 
-    return () => supabase.removeChannel(channel);
-  };
 
   const refreshPlayers = async (code: string) => {
     const { data } = await supabase
@@ -146,14 +204,13 @@ export default function PhaseRush() {
   const refreshEvents = async (code: string) => {
     const { data } = await supabase
       .from("game_events")
-      .select("player_name,progress")
+      .select("player_name,progress,score,is_correct,updated_at")
       .eq("game_code", code);
     setEvents(data || []);
   };
 
-  /* ---------- Fetch All Questions ---------- */
+  /* ---------- Fetch Questions ---------- */
   const fetchQuestions = async (settings: any) => {
-    setLoading(true);
     try {
       const [mode1, mode2, mode4] = await Promise.all([
         fetch("/api/gamemode1/list-all").then((r) => r.json()).catch(() => []),
@@ -164,13 +221,11 @@ export default function PhaseRush() {
       let all = [...mode1, ...mode2, ...mode4];
       if (settings.shuffleQuestions) all.sort(() => Math.random() - 0.5);
 
-      // ✅ Use all questions directly (no slice or filtering)
       setQuestions(all);
       setCurrentQuestion(all[0]);
     } catch (err) {
       console.error("❌ Question fetch failed:", err);
     }
-    setLoading(false);
   };
 
   /* ---------- Start Game ---------- */
@@ -179,37 +234,49 @@ export default function PhaseRush() {
   }, [loading, questions, user, settings]);
 
   const startGame = async () => {
-    setGameActive(true);
-    await supabase.from("game_events").update({ progress: 0 }).eq("game_code", gameCode);
-    refreshEvents(gameCode);
+  setGameActive(true);
 
-    if (musicOn && settings?.musicTheme) {
-      bgAudio.current = new Audio(`/resources/music/${settings.musicTheme}.mp3`);
-      bgAudio.current.loop = true;
-      bgAudio.current.volume = 0.3;
-      bgAudio.current.play().catch(() => {});
-    }
+  await supabase
+    .from("game_events")
+    .update({ progress: 0, score: 0 })
+    .eq("game_code", gameCode);
+  refreshEvents(gameCode);
 
-    const questionInterval = setInterval(nextQuestion, 5000); // every 10s
-    const timer = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          clearInterval(timer);
-          clearInterval(questionInterval);
-          endGame();
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-  };
+  // ✅ Notify professor that the game officially started (for timer sync)
+  await supabase.from("game_state").insert({
+    game_code: gameCode,
+    event_type: "game_started",
+    started_at: new Date().toISOString(),
+    settings: JSON.stringify(settings),
+  });
 
-  /* ---------- Next Question ---------- */
+  if (musicOn && settings?.musicTheme) {
+    bgAudio.current = new Audio(`/resources/music/${settings.musicTheme}.mp3`);
+    bgAudio.current.loop = true;
+    bgAudio.current.volume = 0.3;
+    bgAudio.current.play().catch(() => {});
+  }
+
+  questionInterval.current = setInterval(nextQuestion, 5000);
+  timerInterval.current = setInterval(() => {
+    setTimeLeft((t) => {
+      if (t <= 1) {
+        clearInterval(timerInterval.current!);
+        clearInterval(questionInterval.current!);
+        endGame();
+        return 0;
+      }
+      return t - 1;
+    });
+  }, 1000);
+};
+
+
   const nextQuestion = () => {
     setCanAnswer(true);
     setCurrentQuestion((prev) => {
       const idx = questions.findIndex((q) => q.id === prev?.id);
-      return questions[(idx + 1) % questions.length]; // loops back
+      return questions[(idx + 1) % questions.length];
     });
   };
 
@@ -219,64 +286,160 @@ export default function PhaseRush() {
     setCanAnswer(false);
 
     const correct = key === currentQuestion.answer;
-    const currentPlayer = user.first_name;
-    const current = events.find((e) => e.player_name === currentPlayer);
-    const currentProgress = current ? current.progress : 0;
+    const playerName = user.first_name;
+    const current = events.find((e) => e.player_name === playerName);
+    const progress = current ? current.progress : 0;
+    const score = current ? current.score || 0 : 0;
 
-    const newProgress = correct
-      ? Math.min(100, currentProgress + 10)
-      : Math.max(0, currentProgress - 5);
+    const newProgress = correct ? progress + 10 : Math.max(0, progress - 5);
+    const newScore = correct ? score + 1 : score;
 
-    setMovingBoats((prev) => ({ ...prev, [currentPlayer]: true }));
+    setMovingBoats((prev) => ({ ...prev, [playerName]: true }));
 
-    await supabase
-      .from("game_events")
-      .update({ progress: newProgress })
-      .eq("game_code", gameCode)
-      .eq("player_name", currentPlayer);
+    const { error } = await supabase.from("game_events").upsert(
+      {
+        game_code: gameCode,
+        player_name: playerName,
+        progress: newProgress,
+        score: newScore,
+        is_correct: correct,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "game_code,player_name" }
+    );
 
+    if (error) console.error("❌ Error updating game event:", error);
     refreshEvents(gameCode);
 
-    setTimeout(() => {
-      setMovingBoats((prev) => ({ ...prev, [currentPlayer]: false }));
-    }, 600);
+    setTimeout(() => setMovingBoats((prev) => ({ ...prev, [playerName]: false })), 800);
   };
+/* ---------- End Game ---------- */
+const endGame = async () => {
+  if (bgAudio.current) bgAudio.current.pause();
 
-  /* ---------- End Game ---------- */
-  const endGame = async () => {
-    if (bgAudio.current) bgAudio.current.pause();
-
-    const { data: finalScores } = await supabase
+  try {
+    // 1️⃣ Fetch all game events
+    const { data: rows, error: rowsErr } = await supabase
       .from("game_events")
-      .select("player_name,progress")
+      .select("player_name, score, progress")
       .eq("game_code", gameCode);
 
-    const sorted = (finalScores || [])
-      .sort((a, b) => b.progress - a.progress)
-      .map((p, i) => ({
-        rank: i + 1,
-        name: p.player_name,
-        score: p.progress,
-      }));
+    if (rowsErr) throw rowsErr;
+    if (!rows || rows.length === 0) {
+      await Swal.fire("No Results", "No scores were recorded.", "warning");
+      router.push("/student/play/classmode");
+      return;
+    }
 
+    // 2️⃣ Compute leaderboard
+    const pointsPerQuestion = settings?.points ?? 10;
+    const leaderboard = rows
+      .map((r: any) => {
+        const correct =
+          typeof r.score === "number"
+            ? r.score
+            : Math.round((r.progress ?? 0) / 10);
+        const points = correct * pointsPerQuestion;
+        return {
+          name: r.player_name,
+          correct,
+          progress: r.progress ?? 0,
+          points,
+        };
+      })
+      .sort((a, b) => b.points - a.points || b.progress - a.progress);
+
+    // 3️⃣ Broadcast game finished to professor view
+    await supabase.from("game_state").insert({
+      game_code: gameCode,
+      event_type: "game_finished",
+      started_at: new Date().toISOString(),
+      settings: JSON.stringify(leaderboard),
+    });
+
+    // 4️⃣ Save to Neon (this student only)
+    const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const student_id_number = currentUser?.id_number || currentUser?.id || null;
+    const playerName = currentUser?.first_name || "";
+    const myRecord = leaderboard.find((p) => p.name === playerName);
+
+    // ✅ Use student's own ID for both professor_id and student_id_number
+    const professor_id = student_id_number;
+
+    if (!student_id_number || !myRecord) {
+      console.warn("⚠️ Missing student_id_number or no leaderboard record found.");
+    } else {
+      const recordPayload = {
+        professor_id, // student id
+        game_code: gameCode,
+        student_id_number,
+        points: myRecord.points,
+      };
+
+      console.log("📤 Saving record to Neon:", recordPayload);
+
+      try {
+        const res = await fetch("/api/classmode/records/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(recordPayload),
+        });
+
+        const result = await res.json();
+        if (!res.ok) {
+          console.error("❌ Failed to save record:", result);
+          await Swal.fire("Save Error", "Could not save your game record.", "error");
+        } else {
+          console.log("✅ Record saved successfully:", result);
+        }
+      } catch (saveErr) {
+        console.error("❌ Network/API save error:", saveErr);
+        await Swal.fire("Network Error", "Failed to contact server.", "error");
+      }
+    }
+
+    // 5️⃣ Let professor know this student finished
+    await supabase.from("game_state").insert({
+      game_code: gameCode,
+      event_type: "student_finished",
+      started_at: new Date().toISOString(),
+      settings: JSON.stringify({
+        student: playerName,
+        points: myRecord?.points ?? 0,
+      }),
+    });
+
+    console.log("✅ Student record saved and finish event broadcasted.");
+
+    // 6️⃣ Wait a bit before redirect
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // 7️⃣ Show results
     await Swal.fire({
       title: "🏁 Race Over!",
-      html: sorted
-        .map(
-          (p) =>
-            `<div style="margin:4px 0;font-weight:600">
-              ${p.rank === 1 ? "🥇" : p.rank === 2 ? "🥈" : "🥉"} 
-              ${p.rank}. ${p.name} — ${p.score} pts
-            </div>`
-        )
-        .join(""),
+      html:
+        leaderboard.length > 0
+          ? leaderboard
+              .map(
+                (p, i) =>
+                  `<div style="margin:4px 0;font-weight:600">
+                     ${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : ""} 
+                     ${i + 1}. ${p.name} — ${p.points} pts
+                   </div>`
+              )
+              .join("")
+          : "<p>No data available.</p>",
       icon: "success",
-      confirmButtonText: "Return",
+      confirmButtonText: "Return to Lobby",
       confirmButtonColor: "#7b2020",
     });
 
     router.push("/student/play/classmode");
-  };
+  } catch (err: any) {
+    console.error("❌ Error ending game:", err);
+    Swal.fire("Error", err.message || "Something went wrong ending the game.", "error");
+  }
+};
 
   /* ---------- UI ---------- */
   if (loading)
@@ -310,7 +473,7 @@ export default function PhaseRush() {
               className="w-6 h-6 cursor-pointer"
               onClick={() => {
                 setMusicOn(false);
-                if (bgAudio.current) bgAudio.current.pause();
+                bgAudio.current?.pause();
               }}
             />
           ) : (
@@ -318,13 +481,13 @@ export default function PhaseRush() {
               className="w-6 h-6 cursor-pointer"
               onClick={() => {
                 setMusicOn(true);
-                if (bgAudio.current) bgAudio.current.play().catch(() => {});
+                bgAudio.current?.play().catch(() => {});
               }}
             />
           )}
           <Menu className="w-7 h-7 cursor-pointer" />
           <LogOut
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/student/play/classmode")}
             className="w-6 h-6 cursor-pointer"
           />
         </div>
@@ -345,7 +508,9 @@ export default function PhaseRush() {
             backgroundPosition: "center",
           }}
         >
+          <div className="absolute inset-0 bg-blue-500/20"></div>
           <div className="absolute right-12 top-0 bottom-0 w-2 bg-yellow-400"></div>
+
           {players.map((p, i) => (
             <div key={i} className="absolute" style={{ top: `${50 + i * 60}px` }}>
               <div
@@ -372,10 +537,10 @@ export default function PhaseRush() {
           ))}
         </div>
 
-        {/* Question */}
+        {/* Question Section */}
         {currentQuestion && (
-          <div className="w-full max-w-4xl mt-6 bg-white border border-[#7b2020] rounded-lg p-4 shadow-md">
-            <div className="text-center mb-4">
+          <div className="w-full max-w-4xl mt-6 bg-white border border-[#7b2020] rounded-lg p-4 sm:p-5 shadow-md">
+            <div className="flex flex-col items-center text-center mb-3 sm:mb-4">
               {currentQuestion.question_image && (
                 <Image
                   src={
@@ -386,39 +551,46 @@ export default function PhaseRush() {
                   alt="Question"
                   width={250}
                   height={160}
-                  className="rounded-md border border-gray-300 object-contain mb-3"
+                  className="rounded-md border border-gray-300 object-contain max-h-36 sm:max-h-48 mb-3"
                   unoptimized
                 />
               )}
-              <h3 className="text-lg font-semibold text-[#7b2020]">{currentQuestion.question}</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-[#7b2020] leading-snug">
+                {currentQuestion.question}
+              </h3>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3">
               {["A", "B", "C", "D"].map((key) => {
-                const text = (currentQuestion as any)[`option_${key.toLowerCase()}`];
-                const img = (currentQuestion as any)[`option_${key.toLowerCase()}_image`];
-                if (!text && !img) return null;
+                const textKey = (currentQuestion as any)[`option_${key.toLowerCase()}`];
+                const imgKey = (currentQuestion as any)[`option_${key.toLowerCase()}_image`];
+                if (!textKey && !imgKey) return null;
+
                 return (
                   <button
                     key={key}
                     disabled={!canAnswer}
                     onClick={() => handleAnswer(key as any)}
-                    className={`border-2 border-[#7b2020] rounded-lg p-3 bg-white ${
+                    className={`flex flex-col items-center justify-center border-2 border-[#7b2020] rounded-lg p-2 sm:p-3 bg-white transition-all ${
                       canAnswer ? "hover:bg-[#ffb4a2]" : "opacity-50"
                     }`}
                   >
-                    <p className="font-bold text-[#7b2020] mb-1">{key}.</p>
-                    {img && (
+                    <p className="font-bold text-[#7b2020] text-sm sm:text-base mb-1">{key}.</p>
+
+                    {imgKey && (
                       <Image
-                        src={img.startsWith("http") ? img : `/resources/questions/${img}`}
+                        src={imgKey.startsWith("http") ? imgKey : `/resources/questions/${imgKey}`}
                         alt={`Option ${key}`}
                         width={100}
                         height={100}
-                        className="rounded-md border object-contain mb-1"
+                        className="rounded-md border border-gray-300 object-contain max-h-24 sm:max-h-32 mb-1"
                         unoptimized
                       />
                     )}
-                    {text && <p className="text-sm text-gray-700">{text}</p>}
+
+                    {textKey && (
+                      <p className="text-xs sm:text-sm text-gray-700 text-center">{textKey}</p>
+                    )}
                   </button>
                 );
               })}

@@ -15,18 +15,42 @@ export async function POST(req) {
       );
     }
 
-    // ✅ Save new record
-    const record = await prisma.classGameRecord.create({
-      data: {
+    // 🔍 Check if record already exists (avoid duplicates)
+    const existing = await prisma.classGameRecord.findFirst({
+      where: {
         professor_id,
         game_code,
         student_id_number,
-        points: points ?? 0,
       },
     });
 
+    let record;
+
+    if (existing) {
+      // ✅ Update instead of creating duplicate
+      record = await prisma.classGameRecord.update({
+        where: { id: existing.id },
+        data: {
+          points: points ?? existing.points,
+          updated_at: new Date(),
+        },
+      });
+      console.log(`🔁 Updated existing record for ${student_id_number}`);
+    } else {
+      // ✅ Create new record
+      record = await prisma.classGameRecord.create({
+        data: {
+          professor_id,
+          game_code,
+          student_id_number,
+          points: points ?? 0,
+        },
+      });
+      console.log(`🆕 Created new record for ${student_id_number}`);
+    }
+
     return new Response(JSON.stringify({ success: true, record }), {
-      status: 201,
+      status: 200,
     });
   } catch (error) {
     console.error("❌ Error saving game record:", error);

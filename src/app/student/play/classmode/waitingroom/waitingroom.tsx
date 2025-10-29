@@ -1,11 +1,10 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Swal from "sweetalert2";
-import { LogOut, Search, Menu, ArrowLeft, Play, Loader2 } from "lucide-react";
+import { LogOut, Search, Menu, ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function WaitingRoomPage() {
@@ -19,7 +18,7 @@ export default function WaitingRoomPage() {
   const [connecting, setConnecting] = useState(true);
   const [professorInfo, setProfessorInfo] = useState<any>(null);
 
-  // ✅ Load user + game code
+  /* ---------- Load user + game code ---------- */
   useEffect(() => {
     const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
     if (!savedUser.id_number) {
@@ -29,7 +28,6 @@ export default function WaitingRoomPage() {
 
     const urlCode = searchParams.get("code");
     const storedCode = localStorage.getItem("activeGameCode");
-
     const codeToUse = urlCode || storedCode;
 
     if (!codeToUse) {
@@ -43,36 +41,35 @@ export default function WaitingRoomPage() {
     setGameCode(codeToUse.toUpperCase());
   }, [router, searchParams]);
 
-  // ✅ Join lobby & listen for events
+  /* ---------- Join lobby & listen for realtime events ---------- */
   useEffect(() => {
     if (!gameCode || !user) return;
-
     setConnecting(true);
 
     const joinLobby = async () => {
       try {
-        // Upsert player into Supabase lobby
+        // ✅ Add or update player record (using name, not id_number)
         await supabase.from("players").upsert(
           {
-            id_number: user.id_number,
             game_code: gameCode,
             name: user.first_name,
             avatar: user.avatar || "/resources/avatars/student1.png",
+            is_active: true,
           },
-          { onConflict: "game_code,id_number" }
+          { onConflict: "game_code,name" }
         );
 
         setConnected(true);
         setConnecting(false);
         await refreshPlayers();
 
-        // Optionally fetch professor data (if available via backend)
+        // ✅ Optionally get professor/game details
         const res = await fetch(`/api/classmode/validate?code=${gameCode}`);
         const data = await res.json();
         if (data.success) {
           setProfessorInfo({
             name: data.game.teacher_id || "PROFESSOR",
-            game_type: data.game.game_type.replace("_", " ").toUpperCase(),
+            game_type: data.game.game_type?.replace("_", " ").toUpperCase(),
           });
         }
       } catch (err: any) {
@@ -84,29 +81,26 @@ export default function WaitingRoomPage() {
     const refreshPlayers = async () => {
       const { data, error } = await supabase
         .from("players")
-        .select("*")
+        .select("name, avatar, is_active")
         .eq("game_code", gameCode)
-        .order("id", { ascending: true });
+        .order("joined_at", { ascending: true });
 
       if (!error) setPlayers(data || []);
     };
 
-    // realtime players
+    // ✅ Listen for players joining or leaving
     const playerChannel = supabase
-      .channel("players-realtime")
+      .channel(`players-realtime-${gameCode}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "players" },
-        (payload) => {
-          const row = payload.new as any;
-          if (row?.game_code === gameCode) refreshPlayers();
-        }
+        { event: "*", schema: "public", table: "players", filter: `game_code=eq.${gameCode}` },
+        () => refreshPlayers()
       )
       .subscribe();
 
-    // listen for start events filtered by this game code
+    // ✅ Listen for game start event
     const gameChannel = supabase
-      .channel("game-state-realtime")
+      .channel(`game-state-realtime-${gameCode}`)
       .on(
         "postgres_changes",
         {
@@ -127,22 +121,42 @@ export default function WaitingRoomPage() {
 
     joinLobby();
 
+    // ✅ Remove player on unload or disconnect
+    const handleDisconnect = async () => {
+      if (!user?.first_name || !gameCode) return;
+      console.log("💨 Player disconnected, cleaning up...");
+      await supabase
+        .from("players")
+        .delete()
+        .eq("game_code", gameCode)
+        .eq("name", user.first_name);
+    };
+
+    window.addEventListener("beforeunload", handleDisconnect);
+    window.addEventListener("pagehide", handleDisconnect); // for mobile/tab close
+
+    // ✅ Cleanup on unmount
     return () => {
+      handleDisconnect();
       supabase.removeChannel(playerChannel);
       supabase.removeChannel(gameChannel);
+      window.removeEventListener("beforeunload", handleDisconnect);
+      window.removeEventListener("pagehide", handleDisconnect);
     };
   }, [gameCode, user, router]);
 
-  // ✅ Leave lobby handler (optional)
+  /* ---------- Leave lobby ---------- */
   const leaveLobby = async () => {
-    if (!user?.id_number || !gameCode) return;
+    if (!user?.first_name || !gameCode) return;
     await supabase
       .from("players")
       .delete()
       .eq("game_code", gameCode)
-      .eq("id_number", user.id_number);
+      .eq("name", user.first_name);
+    console.log("🚪 Player left lobby manually.");
   };
 
+  /* ---------- Loading states ---------- */
   if (connecting) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white text-gray-700">
@@ -160,6 +174,7 @@ export default function WaitingRoomPage() {
       </div>
     );
 
+  /* ---------- Display players ---------- */
   const displayPlayers = [
     {
       name: "YOU",
@@ -168,9 +183,10 @@ export default function WaitingRoomPage() {
           ? user.avatar
           : "/resources/avatars/student1.png",
     },
-    ...players.filter((p) => p.id_number !== user.id_number),
+    ...players.filter((p) => p.name !== user.first_name),
   ];
 
+  /* ---------- UI ---------- */
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-white relative">
       {/* Header */}
@@ -178,8 +194,8 @@ export default function WaitingRoomPage() {
         <div className="flex items-center space-x-3">
           <ArrowLeft
             className="w-6 h-6 cursor-pointer hover:text-gray-300"
-            onClick={() => {
-              leaveLobby();
+            onClick={async () => {
+              await leaveLobby();
               router.push("/student/play/classmode");
             }}
           />
@@ -202,8 +218,8 @@ export default function WaitingRoomPage() {
           <Search className="w-6 h-6 cursor-pointer hover:text-gray-300" />
           <Menu className="w-7 h-7 cursor-pointer" />
           <LogOut
-            onClick={() => {
-              leaveLobby();
+            onClick={async () => {
+              await leaveLobby();
               router.push("/");
             }}
             className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"

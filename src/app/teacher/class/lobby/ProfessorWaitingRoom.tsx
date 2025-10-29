@@ -18,6 +18,9 @@ import { supabase } from "@/lib/supabaseClient";
 
 export default function ProfessorWaitingRoom() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const classId = searchParams.get("class_id");
+
   const [professor, setProfessor] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [connecting, setConnecting] = useState(true);
@@ -27,13 +30,10 @@ export default function ProfessorWaitingRoom() {
   const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const searchParams = useSearchParams();
-  const classId = searchParams.get("class_id");
-
   const [gameSettings, setGameSettings] = useState({
     gameCode: "",
     mode: "Phase Rush",
-    duration: 5, // minutes
+    duration: 5,
     points: 10,
     shuffleQuestions: true,
     musicTheme: "theme1",
@@ -67,7 +67,7 @@ export default function ProfessorWaitingRoom() {
     connectLobby(code);
   }, [router]);
 
-  /* ---------- Fetch all available questions ---------- */
+  /* ---------- Fetch available questions ---------- */
   const fetchAvailableQuestions = async () => {
     try {
       const [mode1, mode2, mode4] = await Promise.all([
@@ -75,10 +75,7 @@ export default function ProfessorWaitingRoom() {
         fetch("/api/gamemode2/list").then((res) => res.json()).catch(() => []),
         fetch("/api/gamemode4/list").then((res) => res.json()).catch(() => []),
       ]);
-
-      const all = [...mode1, ...mode2, ...mode4];
-      setAvailableQuestions(all.length);
-      console.log(`✅ Total available questions: ${all.length}`);
+      setAvailableQuestions([...mode1, ...mode2, ...mode4].length);
     } catch (err) {
       console.warn("⚠️ Failed to fetch available questions:", err);
     }
@@ -89,38 +86,17 @@ export default function ProfessorWaitingRoom() {
     try {
       setConnecting(true);
 
-      const { data: existingHost } = await supabase
-        .from("players")
-        .select("*")
-        .eq("game_code", code)
-        .eq("role", "host")
-        .maybeSingle();
-
-      if (!existingHost) {
-        await supabase.from("players").insert([
-          {
-            id_number: "PROFESSOR_HOST",
-            name: professor?.first_name || "Professor",
-            game_code: code,
-            avatar: professor?.avatar || "/resources/avatars/prof.png",
-            role: "host",
-          },
-        ]);
-      }
-
-      refreshPlayers(code);
+      // ✅ Only listen for players; professor no longer added to table
+      await refreshPlayers(code);
       setConnected(true);
       setConnecting(false);
 
       const playerChannel = supabase
-        .channel("players-realtime")
+        .channel(`players-realtime-${code}`)
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "players" },
-          (payload) => {
-            const row = payload.new as any;
-            if (row?.game_code === code) refreshPlayers(code);
-          }
+          { event: "*", schema: "public", table: "players", filter: `game_code=eq.${code}` },
+          () => refreshPlayers(code)
         )
         .subscribe();
 
@@ -132,12 +108,12 @@ export default function ProfessorWaitingRoom() {
   };
 
   const refreshPlayers = async (code: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("players")
-      .select("*")
+      .select("name,avatar,is_active")
       .eq("game_code", code)
-      .order("id", { ascending: true });
-    setPlayers(data || []);
+      .order("joined_at", { ascending: true });
+    if (!error) setPlayers(data || []);
   };
 
   /* ---------- Music Preview ---------- */
@@ -162,60 +138,75 @@ export default function ProfessorWaitingRoom() {
     }
   };
 
-  /* ---------- Start Game ---------- */
-  const handleStartGame = async () => {
-    try {
-      if (gameSettings.duration < 1 || gameSettings.duration > 10) {
-        Swal.fire("Invalid Duration", "Please set between 1 and 10 minutes.", "warning");
-        return;
-      }
-
-      if (gameSettings.points < 10 || gameSettings.points > 1000) {
-        Swal.fire("Invalid Points", "Points must be between 10 and 1000.", "warning");
-        return;
-      }
-
-      const { duration, points, shuffleQuestions, musicTheme, gameCode } = gameSettings;
-
-      const settingsPayload = {
-        gameCode,
-        mode: "Phase Rush",
-        duration,
-        points,
-        shuffleQuestions,
-        musicTheme,
-        class_id: classId ? Number(classId) : null,
-      };
-
-      const { error } = await supabase.from("game_state").insert([
-        {
-          game_code: settingsPayload.gameCode,
-          event_type: "game_started",
-          class_id: settingsPayload.class_id,
-          settings: settingsPayload,
-          started_at: new Date().toISOString(),
-        },
-      ]);
-
-      if (error) throw error;
-
-      localStorage.setItem("gameSettings", JSON.stringify(settingsPayload));
-
-      Swal.fire({
-        title: "✅ Game Started!",
-        text: `Duration: ${duration} minute(s).`,
-        icon: "success",
-        timer: 1000,
-        showConfirmButton: false,
-      });
-
-      setTimeout(() => {
-        router.push(`/teacher/class/lobby/start?class_id=${classId}`);
-      }, 900);
-    } catch (err: any) {
-      Swal.fire("Error", err.message || "Failed to start game.", "error");
+ /* ---------- Start Game ---------- */
+const handleStartGame = async () => {
+  try {
+    if (gameSettings.duration < 1 || gameSettings.duration > 10) {
+      Swal.fire("Invalid Duration", "Please set between 1 and 10 minutes.", "warning");
+      return;
     }
-  };
+
+    if (gameSettings.points < 10 || gameSettings.points > 1000) {
+      Swal.fire("Invalid Points", "Points must be between 10 and 1000.", "warning");
+      return;
+    }
+
+    const { duration, points, shuffleQuestions, musicTheme, gameCode } = gameSettings;
+
+    const settingsPayload = {
+      gameCode,
+      mode: "Phase Rush",
+      duration,
+      points,
+      shuffleQuestions,
+      musicTheme,
+      class_id: classId ? Number(classId) : null,
+    };
+
+    // ✅ Save everything locally first to keep teacher & student in sync
+    localStorage.setItem("activeGameCode", gameCode);
+    localStorage.setItem("gameSettings", JSON.stringify(settingsPayload));
+    localStorage.setItem("activeClassId", classId || "");
+
+    // ✅ Clear any previous "game_started" record for same code (optional cleanup)
+    await supabase
+      .from("game_state")
+      .delete()
+      .eq("game_code", gameCode)
+      .eq("event_type", "game_started");
+
+    // ✅ Insert a fresh "game_started" record
+    const { error } = await supabase.from("game_state").insert([
+      {
+        game_code: gameCode,
+        event_type: "game_started",
+        started_at: new Date().toISOString(),
+        settings: settingsPayload,
+      },
+    ]);
+
+    if (error) throw error;
+
+    console.log("✅ Game started inserted successfully:", gameCode);
+
+    Swal.fire({
+      title: "✅ Game Started!",
+      text: `Duration: ${duration} minute(s). Players may now begin.`,
+      icon: "success",
+      timer: 1200,
+      showConfirmButton: false,
+    });
+
+    // ✅ Redirect after small delay
+    setTimeout(() => {
+      router.push(`/teacher/class/lobby/start?class_id=${classId}`);
+    }, 1000);
+  } catch (err: any) {
+    console.error("❌ Error starting game:", err);
+    Swal.fire("Error", err.message || "Failed to start game.", "error");
+  }
+};
+
 
   /* ---------- Connecting UI ---------- */
   if (connecting)
@@ -246,7 +237,7 @@ export default function ProfessorWaitingRoom() {
         </div>
       </header>
 
-      {/* Settings */}
+      {/* Settings Panel */}
       <div className="mt-8 w-[90%] max-w-md border-2 border-[#7b2020] rounded-xl shadow-lg p-6">
         <h2 className="text-[#7b2020] font-bold text-lg mb-4 text-center">
           GAME SETTINGS PANEL
@@ -261,18 +252,12 @@ export default function ProfessorWaitingRoom() {
               min="1"
               max="10"
               value={gameSettings.duration}
-              onChange={(e) => {
-                let val = Number(e.target.value);
-                if (val < 1) val = 1;
-                if (val > 10) val = 10;
-                setGameSettings({ ...gameSettings, duration: val });
-              }}
-              onBlur={(e) => {
-                let val = Number(e.target.value);
-                if (val < 1) val = 1;
-                if (val > 10) val = 10;
-                setGameSettings({ ...gameSettings, duration: val });
-              }}
+              onChange={(e) =>
+                setGameSettings({
+                  ...gameSettings,
+                  duration: Math.min(10, Math.max(1, Number(e.target.value))),
+                })
+              }
               className="w-full border border-gray-400 rounded-md mt-1 p-2 text-sm"
             />
           </label>
@@ -285,18 +270,12 @@ export default function ProfessorWaitingRoom() {
               min="10"
               max="1000"
               value={gameSettings.points}
-              onChange={(e) => {
-                let val = Number(e.target.value);
-                if (val < 10) val = 10;
-                if (val > 1000) val = 1000;
-                setGameSettings({ ...gameSettings, points: val });
-              }}
-              onBlur={(e) => {
-                let val = Number(e.target.value);
-                if (val < 10) val = 10;
-                if (val > 1000) val = 1000;
-                setGameSettings({ ...gameSettings, points: val });
-              }}
+              onChange={(e) =>
+                setGameSettings({
+                  ...gameSettings,
+                  points: Math.min(1000, Math.max(10, Number(e.target.value))),
+                })
+              }
               className="w-full border border-gray-400 rounded-md mt-1 p-2 text-sm"
             />
           </label>
@@ -323,7 +302,7 @@ export default function ProfessorWaitingRoom() {
             </button>
           </div>
 
-          {/* Music */}
+          {/* Music Theme Selector */}
           <button
             onClick={() => setShowMusicModal(true)}
             className="flex items-center justify-center gap-2 bg-[#7b2020] text-white py-2 rounded-md hover:bg-[#5f1717]"
@@ -343,13 +322,12 @@ export default function ProfessorWaitingRoom() {
                 : "bg-gray-400 cursor-not-allowed text-gray-200"
             }`}
           >
-            <Play className="w-5 h-5" />
-            Start Game
+            <Play className="w-5 h-5" /> Start Game
           </button>
         </div>
       </div>
 
-      {/* Players */}
+      {/* Players List */}
       <div className="mt-10 w-[90%] max-w-md">
         <h3 className="text-[#7b2020] font-bold text-base mb-4 text-center">
           Players in Lobby ({players.length})
@@ -363,7 +341,7 @@ export default function ProfessorWaitingRoom() {
               >
                 <Image
                   src={p.avatar || "/resources/avatars/student1.png"}
-                  alt={p.name || "Player"}
+                  alt={p.name}
                   width={60}
                   height={60}
                   className="rounded-full border-2 border-[#7b2020] shadow-sm object-cover"
@@ -381,7 +359,7 @@ export default function ProfessorWaitingRoom() {
         </div>
       </div>
 
-      {/* Music Modal */}
+      {/* 🎵 Music Theme Modal */}
       {showMusicModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 text-black">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 relative">
