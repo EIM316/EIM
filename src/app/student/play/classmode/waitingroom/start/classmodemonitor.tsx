@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -10,22 +13,29 @@ export default function StartPage() {
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [waitingForStart, setWaitingForStart] = useState(true);
+  const [gameCode, setGameCode] = useState<string>("XXXX"); // ✅ safe storage for code
 
   const mode = "Phase Rush";
-  const modePath = "/classmode/gamemodes/phaserush";
-  const professor = {
-    gameCode: localStorage.getItem("activeGameCode") || "XXXX",
-  };
+  const modePath = "/student/play/classmode/gamemodes/phaserush";
+
+  /* ---------------- Load game code safely ---------------- */
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedCode = localStorage.getItem("activeGameCode") || "XXXX";
+      setGameCode(storedCode);
+    }
+  }, []);
 
   /* ---------------- Load players & setup realtime ---------------- */
   useEffect(() => {
+    if (!gameCode || gameCode === "XXXX") return;
     let pollInterval: any = null;
 
     const refreshPlayers = async () => {
       const { data, error } = await supabase
         .from("players")
         .select("*")
-        .eq("game_code", professor.gameCode)
+        .eq("game_code", gameCode)
         .order("id", { ascending: true });
       if (!error) setPlayers(data || []);
       setLoading(false);
@@ -36,14 +46,14 @@ export default function StartPage() {
 
       // 🔁 Realtime player updates
       const playerChannel = supabase
-        .channel("players-start-realtime")
+        .channel(`players-start-realtime-${gameCode}`)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
             table: "players",
-            filter: `game_code=eq.${professor.gameCode}`,
+            filter: `game_code=eq.${gameCode}`,
           },
           () => refreshPlayers()
         )
@@ -51,14 +61,14 @@ export default function StartPage() {
 
       // 🎮 Game start listener
       const gameChannel = supabase
-        .channel("game-state-start")
+        .channel(`game-state-start-${gameCode}`)
         .on(
           "postgres_changes",
           {
             event: "INSERT",
             schema: "public",
             table: "game_state",
-            filter: `game_code=eq.${professor.gameCode}`,
+            filter: `game_code=eq.${gameCode}`,
           },
           async (payload) => {
             const game = payload.new as any;
@@ -67,7 +77,7 @@ export default function StartPage() {
               await supabase
                 .from("game_events")
                 .update({ progress: 0 })
-                .eq("game_code", professor.gameCode);
+                .eq("game_code", gameCode);
               setWaitingForStart(false);
               setTimeout(() => router.push(modePath), 800);
             }
@@ -80,7 +90,7 @@ export default function StartPage() {
         const { data } = await supabase
           .from("game_state")
           .select("*")
-          .eq("game_code", professor.gameCode)
+          .eq("game_code", gameCode)
           .eq("event_type", "game_started");
 
         if (data && data.length > 0) {
@@ -89,7 +99,7 @@ export default function StartPage() {
           await supabase
             .from("game_events")
             .update({ progress: 0 })
-            .eq("game_code", professor.gameCode);
+            .eq("game_code", gameCode);
           setWaitingForStart(false);
           setTimeout(() => router.push(modePath), 800);
         }
@@ -103,7 +113,7 @@ export default function StartPage() {
     };
 
     init();
-  }, [router]);
+  }, [router, gameCode]);
 
   /* ---------------- UI ---------------- */
   return (
