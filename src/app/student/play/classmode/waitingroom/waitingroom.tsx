@@ -18,28 +18,36 @@ export default function WaitingRoomPage() {
   const [connecting, setConnecting] = useState(true);
   const [professorInfo, setProfessorInfo] = useState<any>(null);
 
-  /* ---------- Load user + game code ---------- */
   useEffect(() => {
-    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
-    if (!savedUser.id_number) {
-      router.push("/");
-      return;
-    }
+  if (typeof window === "undefined") return; // 🚫 stop during SSR
 
-    const urlCode = searchParams.get("code");
-    const storedCode = localStorage.getItem("activeGameCode");
-    const codeToUse = urlCode || storedCode;
+  const savedUserStr = localStorage.getItem("user");
+  if (!savedUserStr) {
+    router.push("/");
+    return;
+  }
 
-    if (!codeToUse) {
-      Swal.fire("Error", "No active game found.", "error").then(() =>
-        router.push("/student/play/classmode")
-      );
-      return;
-    }
+  const savedUser = JSON.parse(savedUserStr);
+  if (!savedUser?.id_number) {
+    router.push("/");
+    return;
+  }
 
-    setUser(savedUser);
-    setGameCode(codeToUse.toUpperCase());
-  }, [router, searchParams]);
+  const urlCode = searchParams.get("code");
+  const storedCode = localStorage.getItem("activeGameCode");
+  const codeToUse = urlCode || storedCode;
+
+  if (!codeToUse) {
+    Swal.fire("Error", "No active game found.", "error").then(() =>
+      router.push("/student/play/classmode")
+    );
+    return;
+  }
+
+  setUser(savedUser);
+  setGameCode(codeToUse.toUpperCase());
+}, [router, searchParams]);
+
 
   /* ---------- Join lobby & listen for realtime events ---------- */
   useEffect(() => {
