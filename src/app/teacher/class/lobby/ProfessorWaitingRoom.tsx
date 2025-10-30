@@ -30,6 +30,8 @@ export default function ProfessorWaitingRoom() {
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [questionMode, setQuestionMode] = useState<"Module" | "Premade" | "Mixed">("Module");
+
 
   const [gameSettings, setGameSettings] = useState({
     gameCode: "",
@@ -208,14 +210,16 @@ const handleStartGame = async () => {
     const { duration, points, shuffleQuestions, musicTheme, gameCode } = gameSettings;
 
     const settingsPayload = {
-      gameCode,
-      mode: "Phase Rush",
-      duration,
-      points,
-      shuffleQuestions,
-      musicTheme,
-      class_id: classId ? Number(classId) : null,
-    };
+  gameCode,
+  mode: "Phase Rush",
+  duration,
+  points,
+  shuffleQuestions,
+  musicTheme,
+  questionMode, // ✅ NEW FIELD
+  class_id: classId ? Number(classId) : null,
+};
+
 
     // ✅ Save everything locally first to keep teacher & student in sync
     localStorage.setItem("activeGameCode", gameCode);
@@ -337,6 +341,27 @@ const handleStartGame = async () => {
               className="w-full border border-gray-400 rounded-md mt-1 p-2 text-sm"
             />
           </label>
+        {/* Mode Chosen: Module | Pre-made | Mixed */}
+<div>
+  <label className="block text-sm font-semibold text-gray-800 mb-1">
+    Mode Chosen
+  </label>
+  <div className="flex justify-between items-center gap-2">
+    {["Module", "Premade", "Mixed"].map((mode) => (
+      <button
+        key={mode}
+        onClick={() => setQuestionMode(mode as "Module" | "Premade" | "Mixed")}
+        className={`flex-1 py-2 rounded-md font-semibold text-sm transition-all ${
+          questionMode === mode
+            ? "bg-[#7b2020] text-white"
+            : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+        }`}
+      >
+        {mode}
+      </button>
+    ))}
+  </div>
+</div>
 
           {/* Shuffle */}
           <div className="flex items-center justify-between">

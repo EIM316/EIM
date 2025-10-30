@@ -39,6 +39,8 @@ model Teacher {
   classes     Class[]          @relation("TeacherClasses")
   class_modes ClassModeGame[]
   game_records ClassGameRecord[] @relation("TeacherGameRecords")
+ class_questions ClassQuestion[] @relation("TeacherClassQuestions")
+
 
   @@map("teacher")
   @@schema("eim")
@@ -67,10 +69,15 @@ model Class {
   updated_at      DateTime?      @default(now()) @db.Timestamp(6)
   teacher         Teacher        @relation("TeacherClasses", fields: [teacher_id], references: [id_number], onDelete: NoAction, onUpdate: NoAction)
   student_classes StudentClass[]
-  class_modes ClassModeGame[]
+  class_modes     ClassModeGame[]
+
+  // ✅ Fixed: explicit relation name matches ClassQuestion.class
+  class_questions ClassQuestion[] @relation("ClassQuestions")
+
   @@map("class")
   @@schema("eim")
 }
+
 
 model StudentClass {
   id         Int      @id @default(autoincrement())
@@ -313,7 +320,52 @@ model Module {
   description String?   @db.Text
   created_by  String?   @db.VarChar(50)
   created_at  DateTime? @default(now()) @db.Timestamp(6)
-
+  slides      ModuleSlides[]  @relation("ModuleToSlides")
   @@map("modules")
   @@schema("eim")
 }
+
+
+model ClassQuestion {
+  id               Int       @id @default(autoincrement())
+  class_id         Int
+  created_by       String    @db.VarChar(50)
+  question         String
+  question_image   String?   @db.VarChar(255)
+  option_a         String
+  option_b         String
+  option_c         String
+  option_d         String
+  option_a_image   String?   @db.VarChar(255)
+  option_b_image   String?   @db.VarChar(255)
+  option_c_image   String?   @db.VarChar(255)
+  option_d_image   String?   @db.VarChar(255)
+  answer           String    @db.Char(1)
+  created_at       DateTime  @default(now()) @db.Timestamp(6)
+  updated_at       DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  // ✅ Matches Class.class_questions above
+  class   Class   @relation("ClassQuestions", fields: [class_id], references: [id], onDelete: Cascade, map: "fk_class_question_class")
+
+  // ✅ Matches Teacher.class_questions
+  teacher Teacher @relation("TeacherClassQuestions", fields: [created_by], references: [id_number], onDelete: Cascade, map: "fk_class_question_teacher")
+
+  @@map("class_questions")
+  @@schema("eim")
+}
+
+
+model ModuleSlides {
+  id          Int       @id @default(autoincrement())
+  module_id   Int
+  admin_id    String    @db.VarChar(50)
+  slides_data Json
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+
+  // 🔗 Fixed relation: give it a name matching Module model
+  module Module @relation("ModuleToSlides", fields: [module_id], references: [id], onDelete: Cascade, map: "fk_module_slides_module")
+
+  @@map("module_slides")
+  @@schema("eim")
+}
+

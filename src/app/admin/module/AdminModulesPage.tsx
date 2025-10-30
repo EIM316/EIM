@@ -92,6 +92,11 @@ export default function AdminModulesPage() {
     }
   };
 
+  /* ✅ Navigate to Module Creator */
+  const handleOpenModule = (moduleId: string) => {
+    router.push(`/admin/module/creator?module_id=${moduleId}&admin_id=${adminId}`);
+  };
+
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-700">
@@ -144,6 +149,7 @@ export default function AdminModulesPage() {
               {modules.map((mod) => (
                 <div
                   key={mod.id}
+                  onClick={() => handleOpenModule(mod.id)} // ✅ Navigate to Module Creator
                   className="bg-white border border-[#548E28]/40 rounded-md p-3 flex items-center justify-between hover:bg-[#f3f8f2] cursor-pointer transition"
                 >
                   <div className="flex flex-col">

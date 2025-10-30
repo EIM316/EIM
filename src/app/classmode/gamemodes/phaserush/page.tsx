@@ -209,24 +209,112 @@ const joinLobby = async (savedUser: any, code: string) => {
     setEvents(data || []);
   };
 
-  /* ---------- Fetch Questions ---------- */
-  const fetchQuestions = async (settings: any) => {
-    try {
+/* ---------- Fetch Questions Based on Mode ---------- */
+const fetchQuestions = async (settings: any) => {
+  try {
+    let all: any[] = [];
+
+    // ✅ 1️⃣ Handle Module Mode (Default Questions)
+    if (settings.questionMode === "Module") {
+      console.log("🧠 Mode: MODULE — using module questions only");
       const [mode1, mode2, mode4] = await Promise.all([
         fetch("/api/gamemode1/list-all").then((r) => r.json()).catch(() => []),
         fetch("/api/gamemode2/list").then((r) => r.json()).catch(() => []),
         fetch("/api/gamemode4/list").then((r) => r.json()).catch(() => []),
       ]);
-
-      let all = [...mode1, ...mode2, ...mode4];
-      if (settings.shuffleQuestions) all.sort(() => Math.random() - 0.5);
-
-      setQuestions(all);
-      setCurrentQuestion(all[0]);
-    } catch (err) {
-      console.error("❌ Question fetch failed:", err);
+      all = [...mode1, ...mode2, ...mode4];
+      console.log(
+        `✅ Loaded ${all.length} module questions — M1:${mode1.length}, M2:${mode2.length}, M4:${mode4.length}`
+      );
     }
-  };
+
+    // ✅ 2️⃣ Handle Pre-made Mode (Teacher’s Questions)
+    else if (settings.questionMode === "Premade") {
+      console.log("🧠 Mode: PRE-MADE — using teacher-created questions");
+
+      const classId = settings?.class_id;
+      const teacherId = settings?.teacher_id || user?.id_number || user?.professor_id;
+
+      if (!classId && !teacherId) {
+        console.warn("⚠️ No class_id or teacher_id found — cannot load pre-made questions.");
+      } else {
+        const endpoint = classId
+          ? `/api/class/questions/list?class_id=${classId}`
+          : `/api/class/questions/list?teacher_id=${teacherId}`;
+
+        console.log("📡 Fetching questions from:", endpoint);
+
+        const res = await fetch(endpoint);
+        const data = await res.json();
+
+        if (data.success && data.questions.length > 0) {
+          all = data.questions;
+          console.log(`✅ Loaded ${data.questions.length} pre-made questions`);
+        } else {
+          console.warn("⚠️ No pre-made questions found for this class/teacher");
+        }
+      }
+    }
+
+    // ✅ 3️⃣ Handle Mixed Mode (Combine Both Sets)
+    else if (settings.questionMode === "Mixed") {
+      console.log("🧠 Mode: MIXED — combining module + pre-made questions");
+
+      const classId = settings?.class_id;
+      const teacherId = settings?.teacher_id || user?.id_number || user?.professor_id;
+
+      const premadeEndpoint = classId
+        ? `/api/class/questions/list?class_id=${classId}`
+        : teacherId
+          ? `/api/class/questions/list?teacher_id=${teacherId}`
+          : null;
+
+      // 🚀 Fetch everything in parallel — now includes gamemode1 too!
+      const [mode1, mode2, mode4, premadeRes] = await Promise.all([
+        fetch("/api/gamemode1/list-all").then((r) => r.json()).catch(() => []),
+        fetch("/api/gamemode2/list").then((r) => r.json()).catch(() => []),
+        fetch("/api/gamemode4/list").then((r) => r.json()).catch(() => []),
+        premadeEndpoint
+          ? fetch(premadeEndpoint)
+              .then((r) => r.json())
+              .catch(() => ({ success: false, questions: [] }))
+          : Promise.resolve({ success: false, questions: [] }),
+      ]);
+
+      const premade = premadeRes.success ? premadeRes.questions : [];
+
+      // 🧩 Combine all
+      all = [...mode1, ...mode2, ...mode4, ...premade];
+
+      console.log(
+        `✅ Loaded ${all.length} total questions — Module(M1:${mode1.length}, M2:${mode2.length}, M4:${mode4.length}) + Premade(${premade.length})`
+      );
+    }
+
+    // ✅ 4️⃣ Fallback (If no questions found)
+    if (!Array.isArray(all) || all.length === 0) {
+      console.warn("⚠️ No questions available for this mode!");
+      Swal.fire("No Questions Found", "No available questions for this mode.", "warning");
+      setQuestions([]);
+      return;
+    }
+
+    // ✅ 5️⃣ Shuffle if enabled
+    if (settings.shuffleQuestions) {
+      all.sort(() => Math.random() - 0.5);
+    }
+
+    // ✅ 6️⃣ Apply questions
+    setQuestions(all);
+    setCurrentQuestion(all[0]);
+    console.log(`✅ Loaded ${all.length} questions for ${settings.questionMode} mode`);
+  } catch (err) {
+    console.error("❌ Question fetch failed:", err);
+    Swal.fire("Error", "Failed to load questions.", "error");
+  }
+};
+
+
   // ✅ Preload and unlock the audio system on first user click
 useEffect(() => {
   const unlockAudio = () => {

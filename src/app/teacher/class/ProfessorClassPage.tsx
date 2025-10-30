@@ -3,8 +3,21 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import Image from "next/image";
-import { ArrowLeft, Plus, Search, Copy, X, LogIn } from "lucide-react";
+import { ArrowLeft, Plus, Search, Copy, X } from "lucide-react";
 import Swal from "sweetalert2";
+
+// ✅ Strong typing for safety
+type OptionKey = "A" | "B" | "C" | "D";
+
+interface Question {
+  id: number;
+  question: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  answer: string;
+}
 
 export default function ProfessorClassPage() {
   const router = useRouter();
@@ -14,13 +27,65 @@ export default function ProfessorClassPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [classInfo, setClassInfo] = useState<any>(null);
   const [games, setGames] = useState<any[]>([]);
+  const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [selectedMode, setSelectedMode] = useState("Phase Rush");
+  const [selectedMode] = useState("Phase Rush");
   const [gameCode, setGameCode] = useState("");
-  const [records, setRecords] = useState<any[]>([]);
 
+  // ✅ Question system
+  const [showQuestionListModal, setShowQuestionListModal] = useState(false);
+  const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
+
+  const [question, setQuestion] = useState("");
+  const [options, setOptions] = useState<Record<OptionKey, string>>({
+    A: "",
+    B: "",
+    C: "",
+    D: "",
+  });
+  const [answer, setAnswer] = useState<OptionKey>("A");
+
+  // ✅ Image states
+  const [questionImage, setQuestionImage] = useState<string | null>(null);
+  const [optionImages, setOptionImages] = useState<Record<OptionKey, string | null>>({
+    A: null,
+    B: null,
+    C: null,
+    D: null,
+  });
+  
+    // ✅ Go to Lobby
+  const goToLobby = (game: any) => {
+    localStorage.setItem("activeGameCode", game.game_code);
+    localStorage.setItem("activeGameType", game.game_type);
+    localStorage.setItem("activeClassId", classId?.toString() || "");
+
+    router.push(`/teacher/class/lobby?code=${game.game_code}&class_id=${classId}`);
+  };
+  // 🧩 Handle image selection
+  const handleImageSelect = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    key?: OptionKey
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (key) {
+        setOptionImages((prev) => ({ ...prev, [key]: reader.result as string }));
+      } else {
+        setQuestionImage(reader.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // ✅ Load teacher info
   const [user, setUser] = useState<any>(null);
@@ -32,36 +97,53 @@ export default function ProfessorClassPage() {
     }
   }, []);
 
+  // ✅ Fetch data
   const fetchAllData = async () => {
-  if (!classId) return;
-  try {
-    setLoading(true);
+    if (!classId) return;
+    try {
+      setLoading(true);
+      const [classRes, studentRes, gameRes, recordRes] = await Promise.all([
+        fetch(`/api/class/info?class_id=${classId}`),
+        fetch(`/api/class/students?class_id=${classId}`),
+        fetch(`/api/classmode/list?class_id=${classId}`),
+        fetch(`/api/classmode/records/get?class_id=${classId}`),
+      ]);
 
-    const [classRes, studentRes, gameRes, recordRes] = await Promise.all([
-      fetch(`/api/class/info?class_id=${classId}`),
-      fetch(`/api/class/students?class_id=${classId}`),
-      fetch(`/api/classmode/list?class_id=${classId}`),
-      fetch(`/api/classmode/records/get?class_id=${classId}`), // ✅ new
-    ]);
+      const classData = await classRes.json();
+      const studentData = await studentRes.json();
+      const gameData = await gameRes.json();
+      const recordData = await recordRes.json();
 
-    const classData = await classRes.json();
-    const studentData = await studentRes.json();
-    const gameData = await gameRes.json();
-    const recordData = await recordRes.json();
+      if (classData.success) setClassInfo(classData.class);
+      if (studentData.success) setStudents(studentData.students);
+      if (gameData.success) setGames(gameData.games || []);
+      if (recordData.success) setRecords(recordData.records || []);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    if (classData.success) setClassInfo(classData.class);
-    if (studentData.success) setStudents(studentData.students);
-    if (gameData.success) setGames(gameData.games || []);
-    if (recordData.success) setRecords(recordData.records || []);
-  } catch (err) {
-    console.error("Error fetching data:", err);
-  } finally {
-    setLoading(false);
-  }
-};
+  const openQuestionList = async () => {
+    if (!classId) return;
+    setLoadingQuestions(true);
+    try {
+      const res = await fetch(`/api/class/questions/list?class_id=${classId}`);
+      const data = await res.json();
+      if (data.success) setQuestions(data.questions);
+      else setQuestions([]);
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Failed to load questions", "error");
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
 
   useEffect(() => {
     fetchAllData();
+    openQuestionList();
   }, [classId]);
 
   // ✅ Filter students
@@ -90,66 +172,197 @@ export default function ProfessorClassPage() {
     });
   };
 
-// ✅ Create new game (frontend now sends its generated code to backend)
-const handleCreateGame = async () => {
-  if (!selectedMode) {
-    Swal.fire("Select Game Mode", "Please choose a game mode.", "warning");
-    return;
-  }
+  // ✅ Create new game
+  const handleCreateGame = async () => {
+    if (!selectedMode) {
+      Swal.fire("Select Game Mode", "Please choose a game mode.", "warning");
+      return;
+    }
 
-  if (!classId || !user?.id_number) return;
+    if (!classId || !user?.id_number) return;
 
-  try {
-    const res = await fetch("/api/classmode/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        class_id: Number(classId),
-        teacher_id: user.id_number,
-        game_type: selectedMode.toLowerCase().replace(" ", "_"),
-        game_code: gameCode, // ✅ send frontend-generated code
-      }),
-    });
-
-    const data = await res.json();
-
-    if (data.success) {
-      // ✅ Use the backend’s confirmed game_code (same as sent)
-      Swal.fire({
-        title: "Game Created!",
-        text: `Game code: ${data.game.game_code}`,
-        icon: "success",
-        confirmButtonColor: "#7b2020",
+    try {
+      const res = await fetch("/api/classmode/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          class_id: Number(classId),
+          teacher_id: user.id_number,
+          game_type: selectedMode.toLowerCase().replace(" ", "_"),
+          game_code: gameCode,
+        }),
       });
 
-      // ✅ Sync modal and state with backend record
-      setGameCode(data.game.game_code);
-      setShowModal(false);
-      fetchAllData();
-    } else {
-      Swal.fire("Error", data.error || "Failed to create game.", "error");
+      const data = await res.json();
+
+      if (data.success) {
+        Swal.fire({
+          title: "Game Created!",
+          text: `Game code: ${data.game.game_code}`,
+          icon: "success",
+          confirmButtonColor: "#7b2020",
+        });
+
+        setGameCode(data.game.game_code);
+        setShowModal(false);
+        fetchAllData();
+      } else {
+        Swal.fire("Error", data.error || "Failed to create game.", "error");
+      }
+    } catch (error) {
+      console.error("❌ Create Game Error:", error);
+      Swal.fire("Error", "Server error occurred.", "error");
     }
-  } catch (error) {
-    console.error("❌ Create Game Error:", error);
-    Swal.fire("Error", "Server error occurred.", "error");
-  }
-};
+  };
 
+  // ✅ Question Modals
+  const handleOpenAddQuestion = () => {
+    setShowAddQuestionModal(true);
+    setEditMode(false);
+    setQuestion("");
+    setOptions({ A: "", B: "", C: "", D: "" });
+    setAnswer("A");
+    setQuestionImage(null);
+    setOptionImages({ A: null, B: null, C: null, D: null });
+    setSelectedQuestion(null);
+  };
 
+  const handleEditQuestion = (q: Question) => {
+    setShowAddQuestionModal(true);
+    setEditMode(true);
+    setSelectedQuestion(q);
+    setQuestion(q.question);
+    setOptions({
+      A: q.option_a,
+      B: q.option_b,
+      C: q.option_c,
+      D: q.option_d,
+    });
+    setAnswer(q.answer as OptionKey);
+  };
 
-// ✅ Go to Lobby
-const goToLobby = (game: any) => {
-  localStorage.setItem("activeGameCode", game.game_code);
-  localStorage.setItem("activeGameType", game.game_type);
-  localStorage.setItem("activeClassId", classId?.toString() || "");
+  const handleSaveQuestion = async () => {
+    if (!question.trim()) {
+      Swal.fire("Error", "Please enter a question", "warning");
+      return;
+    }
 
-  router.push(`/teacher/class/lobby?code=${game.game_code}&class_id=${classId}`);
-};
+    try {
+      const res = await fetch("/api/class/questions/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          class_id: Number(classId),
+          teacher_id: user.id_number,
+          question,
+          option_a: options.A,
+          option_b: options.B,
+          option_c: options.C,
+          option_d: options.D,
+          answer,
+          question_image: questionImage,
+          option_images: optionImages,
+        }),
+      });
+      const data = await res.json();
 
+      if (data.success) {
+        Swal.fire("Success", "Question added!", "success");
+        setShowAddQuestionModal(false);
+        openQuestionList();
+      } else {
+        Swal.fire("Error", data.error || "Failed to save question.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Server error saving question.", "error");
+    }
+  };
+
+  const handleUpdateQuestion = async () => {
+    if (!selectedQuestion) return;
+    try {
+      const res = await fetch("/api/class/questions/update", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedQuestion.id,
+          question,
+          option_a: options.A,
+          option_b: options.B,
+          option_c: options.C,
+          option_d: options.D,
+          answer,
+          question_image: questionImage,
+          option_images: optionImages,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        Swal.fire("Updated!", "Question updated successfully.", "success");
+        setShowAddQuestionModal(false);
+        openQuestionList();
+      } else {
+        Swal.fire("Error", data.error || "Failed to update question.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Server error updating question.", "error");
+    }
+  };
+
+  const handleDeleteQuestion = async (id: number) => {
+    const confirm = await Swal.fire({
+      title: "Are you sure?",
+      text: "This question will be permanently deleted.",
+      icon: "warning",
+      showCancelButton: true,
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/class/questions/delete?id=${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        Swal.fire("Deleted", "Question removed successfully.", "success");
+         // ✅ Refresh question list
+      openQuestionList();
+
+      // ✅ Close any open modals automatically
+      setShowAddQuestionModal(false);
+      setShowQuestionListModal(false);
+      setSelectedQuestion(null);
+      setEditMode(false);
+      } else {
+        Swal.fire("Error", data.error || "Failed to delete question.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Server error deleting question.", "error");
+    }
+  };
+
+  // ✅ RENDER
   if (loading)
     return (
       <div className="flex justify-center items-center min-h-screen text-gray-600">
         Loading class data...
+      </div>
+    );
+
+  if (!classInfo)
+    return (
+      <div className="flex flex-col justify-center items-center min-h-screen text-gray-700">
+        <p>Class not found.</p>
+        <button
+          onClick={() => router.push("/teacher")}
+          className="text-[#7b2020] font-semibold mt-2 underline"
+        >
+          Go back
+        </button>
       </div>
     );
 
@@ -261,6 +474,63 @@ const goToLobby = (game: any) => {
   </div>
 </section>
 
+{/* 🧠 QUESTION BANK SECTION */}
+<section className="w-[90%] max-w-md mt-6 relative">
+  <h2 className="text-[#7b2020] font-bold text-base mb-2">QUESTION BANK</h2>
+
+  <div className="border-2 border-[#7b2020] rounded-lg bg-[#f8e8e8] p-5 flex flex-col relative min-h-[200px]">
+    {loadingQuestions ? (
+      <div className="text-center text-gray-500 py-10">Loading questions...</div>
+    ) : questions.length > 0 ? (
+      <div className="w-full max-h-[250px] overflow-y-auto">
+        <table className="w-full text-left border-collapse">
+          <thead className="sticky top-0 bg-[#7b2020] text-white text-sm">
+            <tr>
+              <th className="p-2 pl-3">Question</th>
+              <th className="p-2 text-center">Answer</th>
+              <th className="p-2 text-right pr-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {questions.map((q, i) => (
+              <tr
+                key={q.id}
+                className="border-b border-[#7b2020]/30 hover:bg-[#f3dada] transition-all cursor-pointer"
+                onClick={() => handleEditQuestion(q)}
+              >
+                <td className="p-2 pl-3 text-sm font-medium text-[#7b2020] truncate max-w-[180px]">
+                  Question {i + 1}
+                </td>
+                <td className="p-2 text-center text-sm text-gray-700 font-semibold">
+                  {q.answer}
+                </td>
+                <td className="p-2 text-right pr-3 text-[#7b2020] font-semibold">
+                  →
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <p className="text-sm text-gray-700 font-medium text-center">
+        NO QUESTIONS YET
+      </p>
+    )}
+
+    {/* ➕ Create New Question Button */}
+    <button
+      onClick={() => {
+        handleOpenAddQuestion();
+      }}
+      className="absolute bottom-3 right-3 bg-[#7b2020] text-white p-3 rounded-full shadow-md hover:bg-[#5f1717]"
+    >
+      <Plus className="w-5 h-5" />
+    </button>
+  </div>
+</section>
+
+
  {/* Class Mode Lobby */}
 <section className="w-[90%] max-w-md mt-6 relative">
   <h2 className="text-[#7b2020] font-bold text-base mb-2">
@@ -291,8 +561,8 @@ const goToLobby = (game: any) => {
                 <td className="p-2 text-sm font-semibold text-[#7b2020]">
                   {game.game_code}
                 </td>
-                <td className="p-2 text-sm text-right pr-3 text-[#7b2020] font-semibold">
-                  -&gt;
+                <td className="p-2 text-right pr-3 text-[#7b2020] font-semibold">
+                  →
                 </td>
               </tr>
             ))}
@@ -313,7 +583,7 @@ const goToLobby = (game: any) => {
       }}
       className="absolute bottom-3 right-3 bg-[#7b2020] text-white p-3 rounded-full shadow-md hover:bg-[#5f1717]"
     >
-      +
+    <Plus className="w-5 h-5" />
     </button>
   </div>
 </section>
@@ -375,6 +645,187 @@ const goToLobby = (game: any) => {
   </div>
 </section>
 
+{/* ✅ Question List Modal */}
+{showQuestionListModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+    <div className="bg-white w-[90%] max-w-md p-6 rounded-lg shadow-lg relative">
+      <button
+        onClick={() => setShowQuestionListModal(false)}
+        className="absolute top-3 right-3 text-gray-500 hover:text-black"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      <h2 className="text-[#7b2020] font-bold text-lg mb-4 text-center">
+        Questions for {classInfo.class_name}
+      </h2>
+
+      {loadingQuestions ? (
+        <p className="text-center text-gray-500">Loading questions...</p>
+      ) : questions.length === 0 ? (
+        <p className="text-center text-gray-500 italic">No questions yet.</p>
+      ) : (
+        <ul className="space-y-2 max-h-[300px] overflow-y-auto">
+          {questions.map((q, i) => (
+            <li
+              key={q.id}
+              onClick={() => handleEditQuestion(q)}
+              className="border border-[#7b2020]/40 rounded-md px-3 py-2 flex justify-between cursor-pointer hover:bg-[#f3dada]"
+            >
+              <span className="text-[#7b2020] font-medium">
+                Q{i + 1}: {q.question}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteQuestion(q.id);
+                }}
+                className="text-red-500 text-sm"
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* ➕ Add Question Button */}
+      <button
+        onClick={handleOpenAddQuestion}
+        className="absolute bottom-4 right-4 bg-[#7b2020] text-white p-3 rounded-full shadow-lg hover:bg-[#5f1717]"
+      >
+        <Plus className="w-5 h-5" />
+      </button>
+    </div>
+  </div>
+)}
+
+{/* ✅ Add / Edit Question Modal */}
+{showAddQuestionModal && (
+  <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex justify-center items-center text-black">
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 relative">
+      <button
+        onClick={() => setShowAddQuestionModal(false)}
+        className="absolute top-4 right-4 text-gray-600 hover:text-red-600"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      <h2 className="text-xl font-semibold mb-4  text-[#7b2020] text-center">
+        {editMode ? "Edit Question" : "Add Question"}
+      </h2>
+
+      {/* Question + Image Upload */}
+      <div className="flex gap-3 items-center mb-4">
+        {questionImage ? (
+          <div className="relative">
+            <img
+              src={questionImage}
+              alt="Question"
+              className="w-24 h-24 object-contain rounded-lg border bg-gray-100 p-1"
+            />
+            <button
+              onClick={() => setQuestionImage(null)}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-gray-400 rounded-lg cursor-pointer hover:bg-gray-100">
+            <Plus className="w-5 h-5 text-gray-500" />
+            <span className="text-xs text-gray-500 mt-1">Add</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleImageSelect(e)}
+            />
+          </label>
+        )}
+        <input
+          type="text"
+          placeholder="Enter question"
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          className="flex-1 border border-gray-400 rounded-md px-3 py-2"
+        />
+      </div>
+
+      {/* Option Inputs with Optional Images */}
+      {(["A", "B", "C", "D"] as OptionKey[]).map((key) => (
+        <div key={key} className="flex gap-3 items-center mb-2">
+          {optionImages[key] ? (
+            <div className="relative">
+              <img
+                src={optionImages[key] as string}
+                alt={`Option ${key}`}
+                className="w-20 h-20 object-contain rounded-lg border bg-gray-100 p-1"
+              />
+              <button
+                onClick={() =>
+                  setOptionImages((prev) => ({ ...prev, [key]: null }))
+                }
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center w-16 h-16 border-2 border-dashed border-gray-400 rounded-lg cursor-pointer hover:bg-gray-100">
+              <Plus className="w-5 h-5 text-gray-500" />
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleImageSelect(e, key)}
+              />
+            </label>
+          )}
+          <input
+            type="text"
+            placeholder={`Option ${key}`}
+            value={options[key]}
+            onChange={(e) =>
+              setOptions((prev) => ({ ...prev, [key]: e.target.value }))
+            }
+            className="flex-1 border border-gray-400 rounded-md px-3 py-2"
+          />
+        </div>
+      ))}
+
+      {/* Answer Selector */}
+      <select
+        value={answer}
+        onChange={(e) => setAnswer(e.target.value as OptionKey)}
+        className="w-full border border-gray-400 rounded-md px-3 py-2 mt-2 mb-4"
+      >
+        <option value="A">Answer: A</option>
+        <option value="B">Answer: B</option>
+        <option value="C">Answer: C</option>
+        <option value="D">Answer: D</option>
+      </select>
+
+      <div className="flex gap-3">
+        <button
+          onClick={editMode ? handleUpdateQuestion : handleSaveQuestion}
+          className="flex-1 bg-[#7b2020] text-white py-2 rounded-md hover:bg-[#3d6a1f]"
+        >
+          {editMode ? "Update Question" : "Save Question"}
+        </button>
+
+        {editMode && selectedQuestion && (
+          <button
+            onClick={() => handleDeleteQuestion(selectedQuestion.id)}
+            className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+          >
+            🗑 Remove
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
 
       {/* Modal */}
