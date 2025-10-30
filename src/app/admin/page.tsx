@@ -12,16 +12,16 @@ export default function AdminPage() {
   const [stats, setStats] = useState({
     students: 0,
     teachers: 0,
-    modules: 3,
-    classMode: 1,
-    classes: 1,
-    gameMode: 4,
+    modules: 0,
+    classModes: 0,
+    classes: 0,
   });
 
   // ✅ Load admin user
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const savedType = localStorage.getItem("userType");
+
     if (!savedUser || savedType !== "admin") {
       router.push("/");
       return;
@@ -29,26 +29,33 @@ export default function AdminPage() {
     setUser(JSON.parse(savedUser));
   }, [router]);
 
-  // ✅ Fetch teacher & student count from backend
+  // ✅ Fetch dashboard stats from API
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchDashboardData = async () => {
       try {
         const res = await fetch("/api/admin/dashboard");
         const data = await res.json();
-        if (data.success) {
-          setStats((prev) => ({
-            ...prev,
-            students: data.students,
-            teachers: data.teachers,
-          }));
+
+        if (data.success && data.stats) {
+          setStats({
+            students: data.stats.students,
+            teachers: data.stats.teachers,
+            modules: data.stats.modules,
+            classModes: data.stats.classModes,
+            classes: data.stats.classes,
+          });
+        } else {
+          console.error("❌ Failed to load dashboard stats:", data.error);
         }
       } catch (err) {
-        console.error("Dashboard fetch error:", err);
+        console.error("❌ Dashboard fetch error:", err);
       }
     };
-    fetchData();
+
+    fetchDashboardData();
   }, []);
 
+  // ✅ Handle logout
   const handleLogout = () => {
     Swal.fire({
       title: "Logout?",
@@ -74,46 +81,46 @@ export default function AdminPage() {
     );
   }
 
-  // ✅ Define all dashboard cards with their routes
+  // ✅ Dashboard Cards
   const cards = [
     {
       title: "Students",
       count: stats.students,
       color: "bg-[#66BB6A]",
       icon: "/resources/admin/student.png",
-      link: "/admin/students",
+      link: "/admin/student",
     },
     {
       title: "Teachers",
       count: stats.teachers,
       color: "bg-[#81C784]",
       icon: "/resources/admin/teacher.png",
-      link: "/admin/teachers",
+      link: "/admin/teacher",
     },
     {
       title: "Modules",
       count: stats.modules,
       color: "bg-[#AED581]",
       icon: "/resources/admin/module.png",
-      link: "/admin/modules",
+      link: "/admin/module",
     },
     {
       title: "Class Mode",
-      count: stats.classMode,
+      count: stats.classModes,
       color: "bg-[#FF8A65]",
       icon: "/resources/admin/classmode.png",
       link: "/admin/classmode",
     },
     {
-      title: "Class",
+      title: "Classes",
       count: stats.classes,
       color: "bg-[#BA68C8]",
       icon: "/resources/admin/class.jpg",
-      link: "/admin/classes",
+      link: "/admin/class",
     },
     {
       title: "Game Mode",
-      count: stats.gameMode,
+      count: 4, // static for now, since it's predefined
       color: "bg-[#E57373]",
       icon: "/resources/admin/gamemode.png",
       link: "/admin/gamemode",
@@ -125,7 +132,7 @@ export default function AdminPage() {
     if (user?.admin_id) {
       router.push(`${link}?admin_id=${encodeURIComponent(user.admin_id)}`);
     } else {
-      router.push(link); // fallback if admin_id missing
+      router.push(link);
     }
   };
 
@@ -142,7 +149,7 @@ export default function AdminPage() {
             className="rounded-full border-2 border-white"
           />
           <span className="font-semibold text-lg">
-            {user.first_name}
+            {user.first_name?.toUpperCase()}
           </span>
         </div>
 
@@ -156,7 +163,7 @@ export default function AdminPage() {
       </header>
 
       {/* ✅ Dashboard Grid */}
-      <main className="grid grid-cols-2 gap-4 p-6 w-full max-w-md">
+      <main className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-6 w-full max-w-2xl">
         {cards.map((card, index) => (
           <div
             key={index}

@@ -302,6 +302,18 @@ model ClassGameRecord {
   student Student       @relation("StudentGameRecords", fields: [student_id_number], references: [id_number], onDelete: Cascade)
   game    ClassModeGame @relation("GameRecords", fields: [game_code], references: [game_code], onDelete: Cascade)
 
+
   @@map("class_game_records")
+  @@schema("eim")
+}
+
+model Module {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  created_by  String?   @db.VarChar(50)
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+
+  @@map("modules")
   @@schema("eim")
 }

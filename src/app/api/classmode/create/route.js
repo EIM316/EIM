@@ -5,9 +5,9 @@ const prisma = new PrismaClient();
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { class_id, teacher_id, game_type } = body;
+    const { class_id, teacher_id, game_type, game_code } = body;
 
-    // 🧩 Validate inputs
+    // 🧩 Validate required inputs
     if (!class_id || !teacher_id || !game_type) {
       return new Response(
         JSON.stringify({ error: "Missing required fields." }),
@@ -15,8 +15,21 @@ export async function POST(req) {
       );
     }
 
-    // ✅ Generate a random 5-character alphanumeric game code
-    const game_code = Math.random().toString(36).substring(2, 7).toUpperCase();
+    // ✅ Use frontend-provided code if valid, else generate a new one
+    const finalCode =
+      game_code?.trim()?.length === 5
+        ? game_code.toUpperCase()
+        : Math.random().toString(36).substring(2, 7).toUpperCase();
+
+    // ✅ Ensure no duplicate game_code in DB
+    const existing = await prisma.classModeGame.findFirst({
+      where: { game_code: finalCode },
+    });
+
+    // 🔁 If duplicate found, regenerate a unique one
+    const uniqueCode = existing
+      ? Math.random().toString(36).substring(2, 7).toUpperCase()
+      : finalCode;
 
     // ✅ Create the new class mode game
     const newGame = await prisma.classModeGame.create({
@@ -24,7 +37,7 @@ export async function POST(req) {
         class_id: Number(class_id),
         teacher_id,
         game_type,
-        game_code,
+        game_code: uniqueCode,
       },
       select: {
         id: true,

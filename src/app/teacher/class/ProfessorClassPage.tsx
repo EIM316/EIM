@@ -90,43 +90,52 @@ export default function ProfessorClassPage() {
     });
   };
 
-  // ✅ Create new game
-  const handleCreateGame = async () => {
-    if (!selectedMode) {
-      Swal.fire("Select Game Mode", "Please choose a game mode.", "warning");
-      return;
-    }
-    if (!classId || !user?.id_number) return;
+// ✅ Create new game (frontend now sends its generated code to backend)
+const handleCreateGame = async () => {
+  if (!selectedMode) {
+    Swal.fire("Select Game Mode", "Please choose a game mode.", "warning");
+    return;
+  }
 
-    try {
-      const res = await fetch("/api/classmode/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          class_id: Number(classId),
-          teacher_id: user.id_number,
-          game_type: selectedMode.toLowerCase().replace(" ", "_"),
-        }),
+  if (!classId || !user?.id_number) return;
+
+  try {
+    const res = await fetch("/api/classmode/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        class_id: Number(classId),
+        teacher_id: user.id_number,
+        game_type: selectedMode.toLowerCase().replace(" ", "_"),
+        game_code: gameCode, // ✅ send frontend-generated code
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      // ✅ Use the backend’s confirmed game_code (same as sent)
+      Swal.fire({
+        title: "Game Created!",
+        text: `Game code: ${data.game.game_code}`,
+        icon: "success",
+        confirmButtonColor: "#7b2020",
       });
 
-      const data = await res.json();
-
-      if (data.success) {
-        Swal.fire({
-          title: "Game Created!",
-          text: `Game code: ${data.game.game_code}`,
-          icon: "success",
-          confirmButtonColor: "#7b2020",
-        });
-        setShowModal(false);
-        fetchAllData(); // ✅ refresh games after creation
-      } else {
-        Swal.fire("Error", data.error || "Failed to create game.", "error");
-      }
-    } catch (error) {
-      Swal.fire("Error", "Server error occurred.", "error");
+      // ✅ Sync modal and state with backend record
+      setGameCode(data.game.game_code);
+      setShowModal(false);
+      fetchAllData();
+    } else {
+      Swal.fire("Error", data.error || "Failed to create game.", "error");
     }
-  };
+  } catch (error) {
+    console.error("❌ Create Game Error:", error);
+    Swal.fire("Error", "Server error occurred.", "error");
+  }
+};
+
+
 
 // ✅ Go to Lobby
 const goToLobby = (game: any) => {
@@ -252,61 +261,62 @@ const goToLobby = (game: any) => {
   </div>
 </section>
 
-      {/* Class Mode Records */}
-      <section className="w-[90%] max-w-md mt-6 relative">
-        <h2 className="text-[#7b2020] font-bold text-base mb-2">
-          CLASS MODE LOBBY
-        </h2>
+ {/* Class Mode Lobby */}
+<section className="w-[90%] max-w-md mt-6 relative">
+  <h2 className="text-[#7b2020] font-bold text-base mb-2">
+    CLASS MODE LOBBY
+  </h2>
 
-        <div className="border-2 border-[#7b2020] rounded-lg bg-[#f8e8e8] p-5 flex flex-col justify-center items-center relative min-h-[200px]">
-          {games.length > 0 ? (
-            <div className="w-full max-h-[250px] overflow-y-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 bg-[#7b2020] text-white text-sm">
-                  <tr>
-                    <th className="p-2 pl-3">Game Mode</th>
-                    <th className="p-2">Code</th>
-                    <th className="p-2 text-right pr-3">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {games.map((game) => (
-                    <tr
-                      key={game.id}
-                      className="border-b border-[#7b2020]/30 hover:bg-[#f3dada] cursor-pointer text-black"
-                      onClick={() => goToLobby(game)}
-                    >
-                      <td className="p-2 pl-3 text-sm capitalize">
-                        {game.game_type.replace("_", " ")}
-                      </td>
-                      <td className="p-2 text-sm font-semibold text-[#7b2020]">
-                        {game.game_code}
-                      </td>
-                      <td className="p-2 text-sm text-right pr-3 text-[#7b2020]">
-                        {game.status || "Active"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-700 font-medium text-center">
-              NO CLASS MODE GAME RECORD YET
-            </p>
-          )}
+  <div className="border-2 border-[#7b2020] rounded-lg bg-[#f8e8e8] p-5 flex flex-col justify-center items-center relative min-h-[200px]">
+    {games.length > 0 ? (
+      <div className="w-full max-h-[250px] overflow-y-auto">
+        <table className="w-full text-left border-collapse">
+          <thead className="sticky top-0 bg-[#7b2020] text-white text-sm">
+            <tr>
+              <th className="p-2 pl-3">Game Mode</th>
+              <th className="p-2">Code</th>
+              <th className="p-2 text-right pr-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {games.map((game) => (
+              <tr
+                key={game.id}
+                className="border-b border-[#7b2020]/30 hover:bg-[#f3dada] cursor-pointer text-black transition-all"
+                onClick={() => goToLobby(game)}
+              >
+                <td className="p-2 pl-3 text-sm capitalize">
+                  {game.game_type.replace("_", " ")}
+                </td>
+                <td className="p-2 text-sm font-semibold text-[#7b2020]">
+                  {game.game_code}
+                </td>
+                <td className="p-2 text-sm text-right pr-3 text-[#7b2020] font-semibold">
+                  -&gt;
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <p className="text-sm text-gray-700 font-medium text-center">
+        NO CLASS MODE GAME RECORD YET
+      </p>
+    )}
 
-          <button
-            onClick={() => {
-              setShowModal(true);
-              generateGameCode();
-            }}
-            className="absolute bottom-3 right-3 bg-[#7b2020] text-white p-3 rounded-full shadow-md hover:bg-[#5f1717]"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </div>
-      </section>
+    {/* ➕ Create New Game Button */}
+    <button
+      onClick={() => {
+        setShowModal(true);
+        generateGameCode();
+      }}
+      className="absolute bottom-3 right-3 bg-[#7b2020] text-white p-3 rounded-full shadow-md hover:bg-[#5f1717]"
+    >
+      +
+    </button>
+  </div>
+</section>
 
 {/* 🏁 CLASS MODE RECORDS */}
 <section className="w-[90%] max-w-md mt-6 relative">
@@ -335,7 +345,7 @@ const goToLobby = (game: any) => {
                 className="border-b border-[#7b2020]/30 hover:bg-[#f3dada] transition-all cursor-pointer"
                 onClick={() =>
                   router.push(
-                    `/teacher/class/records?code=${rec.game_code}&class_id=${classId}`
+                    `/teacher/class/gamerecords?code=${rec.game_code}&class_id=${classId}`
                   )
                 }
               >

@@ -21,6 +21,11 @@ export default function TeacherPage() {
   const [classCode, setClassCode] = useState("");
   const [classList, setClassList] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+const [selectedClass, setSelectedClass] = useState<any>(null);
+const [newClassName, setNewClassName] = useState("");
+const [showRenameModal, setShowRenameModal] = useState(false);
+
 
   // ✅ Load user from localStorage
   useEffect(() => {
@@ -221,37 +226,166 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* Class Grid */}
-        {!showForm && classList.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 w-full mt-6 px-2">
-            {classList.map((cls) => (
-              <div
-                key={cls.id}
-               onClick={() => router.push(`/teacher/class?class_id=${cls.id}`)}
-
-                className="bg-[#7b2020] text-white rounded-2xl aspect-square flex flex-col justify-center items-center relative shadow-md cursor-pointer hover:bg-[#8b2a2a] transition-all"
-              >
-                <Settings className="absolute top-3 right-3 cursor-pointer" />
-                <h2 className="text-lg font-bold text-center px-2">
-                  {cls.name}
-                </h2>
-                <div className="flex items-center justify-center gap-2 mt-2 text-sm">
-                  <Users className="w-5 h-5" /> {cls.students}
-                </div>
-                <p className="text-xs mt-1">Code: {cls.code}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
-
-      {/* Floating Add Button */}
-      <button
-        onClick={() => setShowForm(!showForm)}
-        className="bg-[#d32f2f] hover:bg-[#b71c1c] text-white rounded-full p-4 fixed bottom-6 right-6 shadow-lg transition-all"
+{/* Class Grid */}
+{!showForm && classList.length > 0 && (
+  <div className="grid grid-cols-2 gap-4 w-full mt-6 px-2">
+    {classList.map((cls) => (
+      <div
+        key={cls.id}
+        onClick={() => router.push(`/teacher/class?class_id=${cls.id}`)}
+        className="bg-[#7b2020] text-white rounded-2xl aspect-square flex flex-col justify-center items-center relative shadow-md cursor-pointer hover:bg-[#8b2a2a] transition-all"
       >
-        <Plus className="w-6 h-6" />
+        {/* ⚙️ Gear Icon */}
+        <Settings
+          className="absolute top-3 right-3 cursor-pointer hover:text-gray-300 transition"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedClass(cls);
+            setShowSettings(true);
+          }}
+        />
+
+        <h2 className="text-lg font-bold text-center px-2">{cls.name}</h2>
+        <div className="flex items-center justify-center gap-2 mt-2 text-sm">
+          <Users className="w-5 h-5" /> {cls.students}
+        </div>
+        <p className="text-xs mt-1">Code: {cls.code}</p>
+      </div>
+    ))}
+  </div>
+)}
+</main>
+
+{/* ⚙️ SETTINGS MODAL */}
+{showSettings && selectedClass && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex justify-center items-center z-50">
+    <div className="bg-white w-[90%] max-w-sm p-6 rounded-lg shadow-lg relative text-center">
+      <button
+        onClick={() => setShowSettings(false)}
+        className="absolute top-3 right-3 text-gray-500 hover:text-black"
+      >
+        ✖
       </button>
+      <h2 className="text-[#7b2020] font-bold text-lg mb-4">⚙️ Class Options</h2>
+      <p className="text-gray-700 font-medium mb-6">{selectedClass.name}</p>
+
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={() => {
+            setShowSettings(false);
+            setShowRenameModal(true);
+            setNewClassName(selectedClass.name);
+          }}
+          className="w-full bg-[#7b2020] text-white font-semibold py-2 rounded-md hover:bg-[#5f1717]"
+        >
+          ✏️ Update Name
+        </button>
+
+        <button
+          onClick={() => {
+            Swal.fire({
+              title: "Archived!",
+              text: `Class "${selectedClass.name}" has been archived successfully.`,
+              icon: "success",
+              confirmButtonColor: "#7b2020",
+            });
+            setShowSettings(false);
+          }}
+          className="w-full bg-gray-300 text-[#7b2020] font-semibold py-2 rounded-md hover:bg-gray-400"
+        >
+          📦 Archive Class
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ✏️ RENAME MODAL */}
+{showRenameModal && selectedClass && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex justify-center items-center z-50">
+    <div className="bg-white w-[90%] max-w-sm p-6 rounded-lg shadow-lg relative">
+      <button
+        onClick={() => setShowRenameModal(false)}
+        className="absolute top-3 right-3 text-gray-500 hover:text-black"
+      >
+        ✖
+      </button>
+
+      <h2 className="text-[#7b2020] font-bold text-lg mb-4 text-center">
+        ✏️ Update Class Name
+      </h2>
+
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        New Class Name
+      </label>
+      <input
+        type="text"
+        value={newClassName}
+        onChange={(e) => setNewClassName(e.target.value)}
+        placeholder="Enter new class name"
+        className="w-full border-2 border-[#7b2020] rounded-md p-2 text-sm mb-4 text-gray-700"
+      />
+
+      <button
+        onClick={async () => {
+          if (!newClassName.trim()) {
+            Swal.fire("Error", "Please enter a new class name.", "error");
+            return;
+          }
+
+          try {
+            const res = await fetch("/api/class/update", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                class_id: selectedClass.id,
+                new_name: newClassName.trim(),
+              }),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+              Swal.fire({
+                title: "Updated!",
+                text: "Class name updated successfully.",
+                icon: "success",
+                confirmButtonColor: "#7b2020",
+              });
+
+              // ✅ Instantly reflect change
+              setClassList((prev) =>
+                prev.map((c) =>
+                  c.id === selectedClass.id
+                    ? { ...c, name: newClassName.trim() }
+                    : c
+                )
+              );
+
+              setShowRenameModal(false);
+            } else {
+              Swal.fire("Error", data.error || "Failed to update class name.", "error");
+            }
+          } catch (err) {
+            Swal.fire("Error", "Server error occurred.", "error");
+          }
+        }}
+        className="w-full bg-[#7b2020] text-white font-semibold py-2 rounded-md hover:bg-[#5f1717]"
+      >
+        Save Changes
+      </button>
+    </div>
+  </div>
+)}
+
+{/* ➕ Floating Add Button */}
+<button
+  onClick={() => setShowForm(!showForm)}
+  className="bg-[#d32f2f] hover:bg-[#b71c1c] text-white rounded-full p-4 fixed bottom-6 right-6 shadow-lg transition-all"
+>
+  <Plus className="w-6 h-6" />
+</button>
+
     </div>
   );
 }

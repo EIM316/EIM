@@ -227,6 +227,23 @@ const joinLobby = async (savedUser: any, code: string) => {
       console.error("❌ Question fetch failed:", err);
     }
   };
+  // ✅ Preload and unlock the audio system on first user click
+useEffect(() => {
+  const unlockAudio = () => {
+    if (!bgAudio.current) {
+      bgAudio.current = new Audio();
+      bgAudio.current.muted = true; // play silently to unlock
+      bgAudio.current.play().catch(() => {});
+      bgAudio.current.pause();
+      bgAudio.current.muted = false;
+      console.log("🔓 Audio context unlocked.");
+    }
+    document.removeEventListener("click", unlockAudio);
+  };
+
+  document.addEventListener("click", unlockAudio);
+  return () => document.removeEventListener("click", unlockAudio);
+}, []);
 
   /* ---------- Start Game ---------- */
   useEffect(() => {
@@ -313,6 +330,45 @@ const joinLobby = async (savedUser: any, code: string) => {
 
     setTimeout(() => setMovingBoats((prev) => ({ ...prev, [playerName]: false })), 800);
   };
+
+
+
+  // 🧩 Helper: Safe, debounced save to prevent duplicate inserts
+const saveToNeon = async (payload: any) => {
+  // Unique session key to prevent spam saves
+  const key = `saving_${payload.game_code}_${payload.student_id_number}`;
+  if (sessionStorage.getItem(key)) {
+    console.log("⚠️ Save already in progress, skipping duplicate.");
+    return;
+  }
+  sessionStorage.setItem(key, "true");
+
+  try {
+    const res = await fetch("/api/classmode/records/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await res.json();
+    if (!res.ok) {
+      console.error("❌ Failed to save record:", result);
+      await Swal.fire("Save Error", "Could not save your game record.", "error");
+    } else {
+      console.log(
+        `✅ Record ${result.action || "saved"} successfully for ${payload.student_id_number}`,
+        result
+      );
+    }
+  } catch (err) {
+    console.error("❌ Network/API save error:", err);
+    await Swal.fire("Network Error", "Failed to contact server.", "error");
+  } finally {
+    // clear lock after 2 seconds
+    setTimeout(() => sessionStorage.removeItem(key), 2000);
+  }
+};
+
 /* ---------- End Game ---------- */
 const endGame = async () => {
   if (bgAudio.current) bgAudio.current.pause();
@@ -363,39 +419,21 @@ const endGame = async () => {
     const playerName = currentUser?.first_name || "";
     const myRecord = leaderboard.find((p) => p.name === playerName);
 
-    // ✅ Use student's own ID for both professor_id and student_id_number
+    // ✅ Use student's own ID as professor_id (for consistency with your schema)
     const professor_id = student_id_number;
 
     if (!student_id_number || !myRecord) {
       console.warn("⚠️ Missing student_id_number or no leaderboard record found.");
     } else {
       const recordPayload = {
-        professor_id, // student id
+        professor_id,
         game_code: gameCode,
         student_id_number,
         points: myRecord.points,
       };
 
       console.log("📤 Saving record to Neon:", recordPayload);
-
-      try {
-        const res = await fetch("/api/classmode/records/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(recordPayload),
-        });
-
-        const result = await res.json();
-        if (!res.ok) {
-          console.error("❌ Failed to save record:", result);
-          await Swal.fire("Save Error", "Could not save your game record.", "error");
-        } else {
-          console.log("✅ Record saved successfully:", result);
-        }
-      } catch (saveErr) {
-        console.error("❌ Network/API save error:", saveErr);
-        await Swal.fire("Network Error", "Failed to contact server.", "error");
-      }
+      await saveToNeon(recordPayload);
     }
 
     // 5️⃣ Let professor know this student finished
@@ -414,7 +452,7 @@ const endGame = async () => {
     // 6️⃣ Wait a bit before redirect
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    // 7️⃣ Show results
+    // 7️⃣ Show leaderboard
     await Swal.fire({
       title: "🏁 Race Over!",
       html:
@@ -440,6 +478,7 @@ const endGame = async () => {
     Swal.fire("Error", err.message || "Something went wrong ending the game.", "error");
   }
 };
+
 
   /* ---------- UI ---------- */
   if (loading)

@@ -369,7 +369,7 @@ const percentRemaining = totalTime > 0 ? Math.max(0, (timeLeft / totalTime) * 10
       onClick={async () => {
   const result = await Swal.fire({
     title: "End Game?",
-    text: "This will delete all data for this game from Supabase.",
+    text: "This will complete now the game. You can check records at Class Game Records",
     icon: "warning",
     showCancelButton: true,
     confirmButtonColor: "#7b2020",
@@ -385,7 +385,7 @@ const percentRemaining = totalTime > 0 ? Math.max(0, (timeLeft / totalTime) * 10
       supabase.from("game_state").delete().eq("game_code", gameCode),
     ]);
 
-    await Swal.fire("Deleted!", "All game data has been cleaned up.", "success");
+    await Swal.fire("Game Completed!", "Ready for new game!", "success");
 
     if (classId) router.push(`/teacher/class?class_id=${classId}`);
     else router.push("/teacher");

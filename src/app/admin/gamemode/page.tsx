@@ -32,8 +32,7 @@ export default function GameModePage() {
       confirmButtonText: "Yes, logout",
     }).then((res) => {
       if (res.isConfirmed) {
-        localStorage.removeItem("user");
-        localStorage.removeItem("userType");
+        localStorage.clear();
         router.push("/");
       }
     });
@@ -44,28 +43,28 @@ export default function GameModePage() {
       id: 1,
       title: "Refresher Challenge",
       description:
-        "A progressive learning mode where students take on up to 20 levels of interactive challenges. Each level builds upon the previous one, helping players refresh their knowledge and skills step by step in a fun and rewarding way.",
+        "A progressive mode with 20 levels of increasing difficulty. Each level builds on the previous one to reinforce learning step-by-step.",
       image: "/resources/admin/game1.png",
     },
     {
       id: 2,
       title: "Quiz Battle",
       description:
-        "A timed quiz game that tests accuracy and speed! Set a default timer of 10 minutes and define the maximum number of items. Perfect for assessing comprehension under time pressure while keeping gameplay exciting.",
+        "A competitive timed quiz! Set time limits and max questions to challenge accuracy and speed.",
       image: "/resources/admin/game2.png",
     },
     {
       id: 3,
       title: "Schematic Builder",
       description:
-        "A creative mode focused on filling in missing parts of schematic diagrams. Teachers can add up to 10 sets of circuit or wiring diagrams for students to complete — perfect for hands-on electrical learning.",
+        "A creative mode for completing schematic diagrams. Ideal for hands-on electrical training.",
       image: "/resources/admin/game3.png",
     },
     {
       id: 4,
       title: "Random Rush (True or False)",
       description:
-        "A fast-paced true or false challenge with a countdown timer. Teachers can set the maximum number of questions, making it an ideal mode for quick reviews and critical-thinking drills.",
+        "A fast-paced true or false challenge with adjustable question counts. Great for quick reviews!",
       image: "/resources/admin/game4.png",
     },
   ];
@@ -80,45 +79,46 @@ export default function GameModePage() {
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-white">
-      {/* Header (reuse from admin) */}
-      <header className="w-full bg-[#548E28] text-white flex items-center justify-between px-4 py-3 shadow-md">
-        <div className="flex items-center space-x-3">
+      {/* ✅ Header */}
+      <header className="w-full bg-[#548E28] text-white flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 shadow-md">
+        <div className="flex items-center gap-3">
+          {/* Back Button */}
+          <button
+            onClick={() => router.push("/admin")}
+            className="text-white text-2xl font-bold hover:opacity-80 transition"
+          >
+            ←
+          </button>
+
+          {/* Admin Avatar */}
           <Image
-            src={user.avatar || "/admin-avatar.png"}
-            alt="Profile"
+            src={user.avatar || "/resources/icons/admin.png"}
+            alt="Admin Avatar"
             width={40}
             height={40}
             className="rounded-full border-2 border-white"
           />
-          <span className="font-semibold text-lg">
-            {user.first_name?.toUpperCase()}
-          </span>
+
+          {/* Admin Info */}
+          <div className="flex flex-col">
+            <h1 className="font-semibold text-base sm:text-lg leading-tight">
+             Game Modes
+            </h1>
+            <p className="text-[11px] sm:text-xs opacity-80">Game Mode Manager</p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <Menu className="w-7 h-7 cursor-pointer" />
-          <LogOut
-            onClick={handleLogout}
-            className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"
-          />
-        </div>
+        
       </header>
 
-      {/* Main Content */}
+      {/* ✅ Main Content */}
       <main className="flex-1 w-full max-w-5xl px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
           <h1 className="text-2xl font-bold text-[#548E28]">Game Modes</h1>
-          <button
-            onClick={() =>
-              Swal.fire("Add Game Mode", "Feature coming soon!", "info")
-            }
-            className="flex items-center gap-2 bg-[#548E28] text-white px-4 py-2 rounded-lg hover:bg-[#3d6a1f] transition"
-          >
-            <Plus className="w-5 h-5" /> Add Game Mode
-          </button>
+          
         </div>
 
-        {/* Game Mode List */}
+        {/* ✅ Game Mode List */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
           {gameModes.map((mode) => (
             <div

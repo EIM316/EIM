@@ -13,6 +13,7 @@ import {
   Music,
   Check,
   X,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -46,6 +47,59 @@ export default function ProfessorWaitingRoom() {
     { name: "Theme 3", file: "/resources/music/theme3.mp3" },
     { name: "Theme 4", file: "/resources/music/theme4.mp3" },
   ];
+
+  /* ---------- Delete Game Handler (Neon + Supabase cleanup) ---------- */
+const handleDeleteGame = async () => {
+  Swal.fire({
+    title: "Delete This Game?",
+    text: "This will permanently delete the current game from the database.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#7b2020",
+    cancelButtonColor: "#aaa",
+    confirmButtonText: "Yes, delete it",
+    cancelButtonText: "Cancel",
+  }).then(async (result) => {
+    if (result.isConfirmed) {
+      try {
+        const gameCode = localStorage.getItem("activeGameCode");
+        if (!gameCode) {
+          Swal.fire("Error", "No active game found.", "error");
+          return;
+        }
+
+        // ✅ Delete from Neon (Prisma via API)
+        const response = await fetch(`/api/classmode/delete?game_code=${gameCode}`, {
+          method: "DELETE",
+        });
+
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || "Failed to delete game.");
+
+        // ✅ Delete any leftover game_state or players in Supabase
+        await supabase.from("game_state").delete().eq("game_code", gameCode);
+        await supabase.from("players").delete().eq("game_code", gameCode);
+
+        Swal.fire({
+          title: "Deleted!",
+          text: "Game successfully removed.",
+          icon: "success",
+          confirmButtonColor: "#7b2020",
+          timer: 1200,
+          showConfirmButton: false,
+        });
+
+        // ✅ Cleanup localStorage + redirect
+        localStorage.removeItem("activeGameCode");
+        localStorage.removeItem("gameSettings");
+        setTimeout(() => router.push(`/teacher/class?class_id=${classId}`), 1000);
+      } catch (err: any) {
+        console.error("❌ Error deleting game:", err);
+        Swal.fire("Error", err.message || "Failed to delete game.", "error");
+      }
+    }
+  });
+};
 
   /* ---------- Load professor + setup ---------- */
   useEffect(() => {
@@ -220,22 +274,26 @@ const handleStartGame = async () => {
   /* ---------- MAIN UI ---------- */
   return (
     <div className="flex flex-col items-center min-h-screen bg-white">
-      {/* Header */}
-      <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md">
-        <div className="flex items-center gap-3">
-          <ArrowLeft className="w-6 h-6 cursor-pointer" onClick={() => router.back()} />
-          <h1 className="font-semibold text-lg">
-            Game Lobby: {gameSettings.gameCode}
-          </h1>
-        </div>
-        <div className="flex items-center gap-4">
-          <Menu className="w-6 h-6 cursor-pointer hover:text-gray-300" />
-          <LogOut
-            onClick={() => router.push("/")}
-            className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"
-          />
-        </div>
-      </header>
+     {/* Header */}
+<header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md">
+  <div className="flex items-center gap-3">
+    <ArrowLeft className="w-6 h-6 cursor-pointer" onClick={() => router.back()} />
+    <h1 className="font-semibold text-lg">
+      Game Lobby: {gameSettings.gameCode}
+    </h1>
+  </div>
+
+  <div className="flex items-center gap-4">
+    <div title="Delete Game">
+  <Trash2
+    onClick={handleDeleteGame}
+    className="w-6 h-6 cursor-pointer text-white hover:text-red-400 transition-colors"
+  />
+</div>
+
+  </div>
+</header>
+
 
       {/* Settings Panel */}
       <div className="mt-8 w-[90%] max-w-md border-2 border-[#7b2020] rounded-xl shadow-lg p-6">
