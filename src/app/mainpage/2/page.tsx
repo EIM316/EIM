@@ -25,7 +25,7 @@ export default function Section2() {
       <div className="flex flex-col items-center mt-4">
         <p className="text-sm mb-2 italic">To download the app, scan here:</p>
         <img
-          src="/resources/EIM.png"
+          src="/resources/EIM2.png"
           alt="EIM App QR Code"
           className="w-32 h-32 object-contain rounded-md shadow-md bg-white p-2"
         />
