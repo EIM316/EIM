@@ -14,7 +14,7 @@ export default function Section2() {
           <iframe
             className="absolute top-0 left-0 w-full h-full rounded-lg"
             src="https://www.youtube.com/embed/Lx_V_9VJyzM?autoplay=1&mute=1&loop=1&playlist=Lx_V_9VJyzM&controls=1&modestbranding=1&rel=0"
-            title="What is EIM?"
+            title="What is EI?"
             frameBorder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
