@@ -8,24 +8,24 @@ export default function Section2() {
       </p>
 
       {/* YouTube Embed (autoplay, loop, muted) */}
-<div className="w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-lg mb-6">
-  <div className="relative pb-[56.25%] h-0">
-    <iframe
-      className="absolute top-0 left-0 w-full h-full rounded-lg"
-      src="https://www.youtube.com/embed/aDVk5B5Pkns?autoplay=1&mute=1&loop=1&playlist=aDVk5B5Pkns&controls=1&modestbranding=1&rel=0"
-      title="What is EIM?"
-      frameBorder="0"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      allowFullScreen
-    ></iframe>
-  </div>
-</div>
+      <div className="w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-lg mb-6">
+        <div className="relative pb-[56.25%] h-0">
+          <iframe
+            className="absolute top-0 left-0 w-full h-full rounded-lg"
+            src="https://www.youtube.com/embed/qFxSa__fxKw?autoplay=1&mute=1&loop=1&playlist=qFxSa__fxKw&controls=1&modestbranding=1&rel=0"
+            title="What is EIM?"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          ></iframe>
+        </div>
+      </div>
 
       {/* QR Code Section */}
       <div className="flex flex-col items-center mt-4">
         <p className="text-sm mb-2 italic">To download the app, scan here:</p>
         <img
-          src="/resources/EIM2.png"
+          src="/resources/EIM.jpg"
           alt="EIM App QR Code"
           className="w-32 h-32 object-contain rounded-md shadow-md bg-white p-2"
         />
