@@ -38,6 +38,8 @@ export default function StudentRegisterPage() {
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
+  const [loadingDomains, setLoadingDomains] = useState<boolean>(true);
 
   const [validationMsg, setValidationMsg] = useState<ValidationMessages>({
     email: "",
@@ -54,19 +56,41 @@ export default function StudentRegisterPage() {
     confirmPassword: "",
   });
 
-  // ✅ Email Validator
+  // ✅ Fetch allowed domains from backend
+  useEffect(() => {
+    const fetchDomains = async () => {
+      try {
+        setLoadingDomains(true);
+        const res = await fetch("/api/admin/emails/get");
+        const data = await res.json();
+        if (data.success) {
+          const activeDomains = data.records
+            .filter((d: any) => d.active && d.entry_type === "domain")
+            .map((d: any) => d.value.toLowerCase());
+          setAllowedDomains(activeDomains);
+        }
+      } catch (err) {
+        console.error("❌ Failed to load allowed domains:", err);
+      } finally {
+        setLoadingDomains(false);
+      }
+    };
+    fetchDomains();
+  }, []);
+
+  // ✅ Email Validator (checks against DB domains)
   const validateEmail = (email: string): boolean => {
-  const regex = /^[a-zA-Z0-9._%+-]+@(gmail\.com|edu\.ph|edu\.com|cvsu\.edu\.ph)$/;
-  return regex.test(email);
-};
+    if (!email.includes("@")) return false;
+    const domain = "@" + email.split("@")[1]?.toLowerCase();
+    return allowedDomains.includes(domain);
+  };
 
-// ✅ Password Validator — allows ALL special characters
-const validatePassword = (password: string): boolean => {
-  // At least 8 characters, one uppercase, one digit, and one special character
-  const regex = /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=;'/\\\[\]`~])[A-Za-z\d!@#$%^&*(),.?":{}|<>_\-+=;'/\\\[\]`~]{8,}$/;
-  return regex.test(password);
-};
-
+  // ✅ Password Validator
+  const validatePassword = (password: string): boolean => {
+    const regex =
+      /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=;'/\\[\]`~])[A-Za-z\d!@#$%^&*(),.?":{}|<>_\-+=;'/\\[\]`~]{8,}$/;
+    return regex.test(password);
+  };
 
   // ✅ Input Change Handler
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -81,19 +105,22 @@ const validatePassword = (password: string): boolean => {
     let confirmMsg = "";
 
     if (formData.email && !validateEmail(formData.email)) {
-      emailMsg = "Email must end with @gmail.com, .edu.ph, or .edu.com or @cvsu.edu.ph";
+      if (!loadingDomains)
+        emailMsg = allowedDomains.length
+          ? "Your email domain is not allowed or has been disabled."
+          : "Allowed domain list not loaded yet.";
     }
 
     if (formData.password && !validatePassword(formData.password)) {
       passMsg =
-         "Password must be at least 8 characters long, include 1 capital letter, 1 number, and 1 special character.";
+        "Password must be at least 8 characters long, include 1 capital letter, 1 number, and 1 special character.";
     }
 
     if (
       formData.confirmPassword &&
       formData.confirmPassword !== formData.password
     ) {
-      confirmMsg = "Passwords do not match";
+      confirmMsg = "Passwords do not match.";
     }
 
     setValidationMsg({
@@ -111,7 +138,7 @@ const validatePassword = (password: string): boolean => {
       formData.password === formData.confirmPassword;
 
     setIsValidForm(Boolean(allValid));
-  }, [formData]);
+  }, [formData, allowedDomains, loadingDomains]);
 
   // ✅ Fetch Cloudinary Avatars
   useEffect(() => {
@@ -145,6 +172,17 @@ const validatePassword = (password: string): boolean => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!isValidForm) return;
+
+    const domain = "@" + formData.email.split("@")[1]?.toLowerCase();
+    if (!allowedDomains.includes(domain)) {
+      Swal.fire({
+        title: "❌ Registration Blocked",
+        text: "Your email domain is not allowed or has been disabled by the administrator.",
+        icon: "error",
+        confirmButtonColor: "#BC2A2A",
+      });
+      return;
+    }
 
     setLoading(true);
     Swal.fire({
@@ -231,7 +269,7 @@ const validatePassword = (password: string): boolean => {
           <span className="font-normal">To Start Having Fun!</span>
         </p>
 
-        {/* Avatar display */}
+        {/* Avatar */}
         <div className="mb-6 relative">
           <Image
             src={avatar || "/resources/icons/stud1.jpg"}
@@ -259,7 +297,7 @@ const validatePassword = (password: string): boolean => {
           onSubmit={handleSubmit}
           className="w-full max-w-xs sm:max-w-sm flex flex-col space-y-4 text-left"
         >
-          {/* Regular Inputs */}
+          {/* Inputs */}
           {[
             { name: "id_number", label: "ID Number", type: "text" },
             { name: "first_name", label: "First Name", type: "text" },
@@ -284,61 +322,74 @@ const validatePassword = (password: string): boolean => {
                   {(validationMsg as any)[field.name]}
                 </p>
               )}
-            </div>
-          ))}
 
-          {/* Password with show/hide */}
-          {[
-            {
-              name: "password",
-              label: "Password",
-              show: showPassword,
-              setShow: setShowPassword,
-            },
-            {
-              name: "confirmPassword",
-              label: "Confirm Password",
-              show: showConfirmPassword,
-              setShow: setShowConfirmPassword,
-            },
-          ].map((field) => (
-            <div key={field.name} className="flex flex-col relative">
-              <label className="text-sm sm:text-base font-semibold text-gray-700 mb-1">
-                {field.label}
-              </label>
-              <input
-                name={field.name}
-                type={field.show ? "text" : "password"}
-                value={(formData as any)[field.name]}
-                onChange={handleChange}
-                placeholder={`Enter ${field.label}`}
-                className="border border-black rounded-md px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#BC2A2A] text-black pr-10"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => field.setShow((prev) => !prev)}
-                className="absolute right-3 top-8 sm:top-9 text-gray-500 hover:scale-110 transition"
-              >
-                <Image
-                  src={
-                    field.show
-                      ? "/resources/icons/hide.png"
-                      : "/resources/icons/show.png"
-                  }
-                  alt={field.show ? "Hide Password" : "Show Password"}
-                  width={27}
-                  height={22}
-                />
-              </button>
-              {(validationMsg as any)[field.name] && (
-                <p className="text-xs text-red-600 mt-1">
-                  {(validationMsg as any)[field.name]}
-                </p>
+              {/* Allowed domains display */}
+              {field.name === "email" && (
+                <div className="mt-[2px] space-y-[2px] text-[11px]">
+                  {loadingDomains ? (
+                    <div className="flex items-center text-gray-500">
+                      <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      <span>Loading allowed domains...</span>
+                    </div>
+                  ) : allowedDomains.length > 0 ? (
+                    <>
+                      <p className="text-gray-500 font-medium">
+                        Allowed domains:
+                      </p>
+                      <div className="flex flex-wrap gap-x-2 gap-y-1 text-gray-600 ml-1">
+                        {allowedDomains.map((domain, i) => (
+                          <span key={i}>
+                            {domain}
+                            {i < allowedDomains.length - 1 && ","}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-gray-400 italic">
+                      No active domains configured.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           ))}
 
+          {/* Password fields */}
+          {[{ name: "password", label: "Password", show: showPassword, setShow: setShowPassword },
+            { name: "confirmPassword", label: "Confirm Password", show: showConfirmPassword, setShow: setShowConfirmPassword }]
+            .map((field) => (
+              <div key={field.name} className="flex flex-col relative">
+                <label className="text-sm sm:text-base font-semibold text-gray-700 mb-1">
+                  {field.label}
+                </label>
+                <input
+                  name={field.name}
+                  type={field.show ? "text" : "password"}
+                  value={(formData as any)[field.name]}
+                  onChange={handleChange}
+                  placeholder={`Enter ${field.label}`}
+                  className="border border-black rounded-md px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#BC2A2A] text-black pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => field.setShow((prev) => !prev)}
+                  className="absolute right-3 top-8 sm:top-9 text-gray-500 hover:scale-110 transition"
+                >
+                  <Image
+                    src={
+                      field.show
+                        ? "/resources/icons/hide.png"
+                        : "/resources/icons/show.png"
+                    }
+                    alt={field.show ? "Hide Password" : "Show Password"}
+                    width={27}
+                    height={22}
+                  />
+                </button>
+              </div>
+            ))}
 
           <button
             type="submit"
@@ -353,72 +404,73 @@ const validatePassword = (password: string): boolean => {
           </button>
         </form>
 
+        {/* Terms & Privacy */}
         <p className="text-gray-500 text-xs sm:text-sm mt-4 max-w-xs sm:max-w-sm text-center">
-  By clicking continue, you agree to our{" "}
-  <span
-    className="text-[#BC2A2A] underline cursor-pointer"
-    onClick={() => setShowTerms(true)}
-  >
-    Terms of Service
-  </span>{" "}
-  and{" "}
-  <span
-    className="text-[#BC2A2A] underline cursor-pointer"
-    onClick={() => setShowPrivacy(true)}
-  >
-    Privacy Policy
-  </span>
-  .
-</p>
-
+          By clicking continue, you agree to our{" "}
+          <span
+            className="text-[#BC2A2A] underline cursor-pointer"
+            onClick={() => setShowTerms(true)}
+          >
+            Terms of Service
+          </span>{" "}
+          and{" "}
+          <span
+            className="text-[#BC2A2A] underline cursor-pointer"
+            onClick={() => setShowPrivacy(true)}
+          >
+            Privacy Policy
+          </span>
+          .
+        </p>
       </div>
-{/* Terms of Service Modal */}
-{showTerms && (
-  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-xl p-6 w-80 sm:w-[28rem] shadow-lg relative text-gray-700">
-      <h2 className="text-lg font-bold text-center text-[#BC2A2A] mb-3">
-        Terms of Service
-      </h2>
-      <p className="text-sm leading-relaxed text-justify">
-        This learning web app and game are created for educational purposes to help students
-        enhance their understanding of Electrical Installation and Maintenance (EIM).
-        By using this platform, you agree to use it responsibly and solely for learning.
-        Any misuse, exploitation, or unauthorized distribution of the content is strictly prohibited.
-      </p>
-      <button
-        onClick={() => setShowTerms(false)}
-        className="mt-5 w-full bg-[#BC2A2A] text-white py-2 rounded-md font-semibold hover:bg-red-700 transition"
-      >
-        Close
-      </button>
-    </div>
-  </div>
-)}
 
-{/* Privacy Policy Modal */}
-{showPrivacy && (
-  <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-xl p-6 w-80 sm:w-[28rem] shadow-lg relative text-gray-700">
-      <h2 className="text-lg font-bold text-center text-[#BC2A2A] mb-3">
-        Privacy Policy
-      </h2>
-      <p className="text-sm leading-relaxed text-justify">
-        We value your privacy. All information collected during registration, such as ID number,
-        name, and email, is securely stored and used only for academic and progress tracking purposes.
-        No personal data will be shared, sold, or disclosed to third parties.
-        Your data is protected under institutional data management policies.
-      </p>
-      <button
-        onClick={() => setShowPrivacy(false)}
-        className="mt-5 w-full bg-[#BC2A2A] text-white py-2 rounded-md font-semibold hover:bg-red-700 transition"
-      >
-        Close
-      </button>
-    </div>
-  </div>
-)}
+      {/* ✅ Terms Modal */}
+      {showTerms && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-80 sm:w-[28rem] shadow-lg relative text-gray-700">
+            <h2 className="text-lg font-bold text-center text-[#BC2A2A] mb-3">
+              Terms of Service
+            </h2>
+            <p className="text-sm leading-relaxed text-justify">
+              This learning web app and game are created for educational purposes to help students
+              enhance their understanding of Electrical Installation and Maintenance (EIM).
+              By using this platform, you agree to use it responsibly and solely for learning.
+              Any misuse, exploitation, or unauthorized distribution of the content is strictly prohibited.
+            </p>
+            <button
+              onClick={() => setShowTerms(false)}
+              className="mt-5 w-full bg-[#BC2A2A] text-white py-2 rounded-md font-semibold hover:bg-red-700 transition"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Avatar Selection Modal */}
+      {/* ✅ Privacy Modal */}
+      {showPrivacy && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-80 sm:w-[28rem] shadow-lg relative text-gray-700">
+            <h2 className="text-lg font-bold text-center text-[#BC2A2A] mb-3">
+              Privacy Policy
+            </h2>
+            <p className="text-sm leading-relaxed text-justify">
+              We value your privacy. All information collected during registration, such as ID number,
+              name, and email, is securely stored and used only for academic and progress tracking purposes.
+              No personal data will be shared, sold, or disclosed to third parties.
+              Your data is protected under institutional data management policies.
+            </p>
+            <button
+              onClick={() => setShowPrivacy(false)}
+              className="mt-5 w-full bg-[#BC2A2A] text-white py-2 rounded-md font-semibold hover:bg-red-700 transition"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Avatar Selection Modal */}
       {showSelector && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-5 w-72 sm:w-96 shadow-lg relative">

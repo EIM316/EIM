@@ -26,6 +26,9 @@ export default function TeacherRegisterPage() {
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
+  const [loadingDomains, setLoadingDomains] = useState<boolean>(true);
+
   const [validationMsg, setValidationMsg] = useState({
     email: "",
     password: "",
@@ -41,20 +44,44 @@ export default function TeacherRegisterPage() {
     confirmPassword: "",
   });
 
-  // ✅ Validation helpers
+  // ✅ Fetch allowed email domains from database
+  useEffect(() => {
+    const fetchDomains = async () => {
+      try {
+        setLoadingDomains(true);
+        const res = await fetch("/api/admin/emails/get");
+        const data = await res.json();
+
+        if (data.success) {
+          const activeDomains = data.records
+            .filter((d: any) => d.active && d.entry_type === "domain")
+            .map((d: any) => d.value.toLowerCase());
+          setAllowedDomains(activeDomains);
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch allowed domains:", err);
+      } finally {
+        setLoadingDomains(false);
+      }
+    };
+    fetchDomains();
+  }, []);
+
+  // ✅ Email validation (checks domain against DB)
   const validateEmail = (email: string): boolean => {
-    const regex =
-      /^[a-zA-Z0-9._%+-]+@(gmail\.com|edu\.ph|edu\.com|cvsu\.edu\.ph)$/;
-    return regex.test(email);
+    if (!email.includes("@")) return false;
+    const domain = "@" + email.split("@")[1]?.toLowerCase();
+    return allowedDomains.includes(domain);
   };
 
+  // ✅ Password validation
   const validatePassword = (password: string) => {
     const regex =
-      /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=;'/\\\[\]`~])[A-Za-z\d!@#$%^&*(),.?":{}|<>_\-+=;'/\\\[\]`~]{8,}$/;
+      /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=;'/\\[\]`~])[A-Za-z\d!@#$%^&*(),.?":{}|<>_\-+=;'/\\[\]`~]{8,}$/;
     return regex.test(password);
   };
 
-  // ✅ Handle input change
+  // ✅ Input handler
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -67,20 +94,22 @@ export default function TeacherRegisterPage() {
     let confirmMsg = "";
 
     if (formData.email && !validateEmail(formData.email)) {
-      emailMsg =
-        "Email must end with @gmail.com, .edu.ph, or .edu.com or @cvsu.edu.ph";
+      if (!loadingDomains)
+        emailMsg = allowedDomains.length
+          ? "Your email domain is not allowed or has been disabled."
+          : "Allowed domain list not loaded yet.";
     }
 
     if (formData.password && !validatePassword(formData.password)) {
       passMsg =
-        "Password must be at least 8 characters long, include 1 capital letter, 1 number, and 1 special character.";
+        "Password must be at least 8 characters, include 1 capital letter, 1 number, and 1 special character.";
     }
 
     if (
       formData.confirmPassword &&
       formData.confirmPassword !== formData.password
     ) {
-      confirmMsg = "Passwords do not match";
+      confirmMsg = "Passwords do not match.";
     }
 
     setValidationMsg({
@@ -98,9 +127,9 @@ export default function TeacherRegisterPage() {
       formData.password === formData.confirmPassword;
 
     setIsValidForm(Boolean(allValid));
-  }, [formData]);
+  }, [formData, allowedDomains, loadingDomains]);
 
-  // ✅ Fetch Cloudinary Avatars
+  // ✅ Fetch avatars from Cloudinary
   useEffect(() => {
     let mounted = true;
     setLoadingIcons(true);
@@ -116,9 +145,7 @@ export default function TeacherRegisterPage() {
         setIcons(imgs.map((i) => ({ id: i.public_id, url: i.url })));
         if (imgs.length > 0) setAvatar(imgs[0].url);
       })
-      .catch((err) => {
-        console.error("Error fetching Cloudinary images:", err);
-      })
+      .catch((err) => console.error("Error fetching Cloudinary images:", err))
       .finally(() => {
         if (mounted) setLoadingIcons(false);
       });
@@ -128,13 +155,23 @@ export default function TeacherRegisterPage() {
     };
   }, []);
 
-  // ✅ Handle Submit
+  // ✅ Submit Handler
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isValidForm) return;
 
-    setLoading(true);
+    const domain = "@" + formData.email.split("@")[1]?.toLowerCase();
+    if (!allowedDomains.includes(domain)) {
+      Swal.fire({
+        title: "❌ Registration Blocked",
+        text: "Your email domain is not allowed or has been disabled by the administrator.",
+        icon: "error",
+        confirmButtonColor: "#BC2A2A",
+      });
+      return;
+    }
 
+    setLoading(true);
     Swal.fire({
       title: "Registering...",
       text: "Please wait while we process your registration.",
@@ -243,12 +280,12 @@ export default function TeacherRegisterPage() {
           </button>
         </div>
 
-        {/* Registration form */}
+        {/* Registration Form */}
         <form
           onSubmit={handleSubmit}
           className="w-full max-w-xs sm:max-w-sm flex flex-col space-y-4 text-left"
         >
-          {[ 
+          {[
             { name: "id_number", label: "ID Number", type: "text" },
             { name: "first_name", label: "First Name", type: "text" },
             { name: "last_name", label: "Last Name", type: "text" },
@@ -267,6 +304,34 @@ export default function TeacherRegisterPage() {
                 className="border border-black rounded-md px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#BC2A2A] text-black"
                 required
               />
+              {field.name === "email" && (
+                <div className="mt-[2px] space-y-[2px] text-[11px]">
+                  {loadingDomains ? (
+                    <div className="flex items-center text-gray-500">
+                      <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      <span>Loading allowed domains...</span>
+                    </div>
+                  ) : allowedDomains.length > 0 ? (
+                    <>
+                      <p className="text-gray-500 font-medium">
+                        Allowed domains:
+                      </p>
+                      <div className="flex flex-wrap gap-x-2 gap-y-1 text-gray-600 ml-1">
+                        {allowedDomains.map((domain, i) => (
+                          <span key={i}>
+                            {domain}
+                            {i < allowedDomains.length - 1 && ","}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-gray-400 italic">
+                      No active domains configured.
+                    </p>
+                  )}
+                </div>
+              )}
               {validationMsg[field.name as keyof typeof validationMsg] && (
                 <p className="text-xs text-red-600 mt-1">
                   {validationMsg[field.name as keyof typeof validationMsg]}
@@ -276,41 +341,40 @@ export default function TeacherRegisterPage() {
           ))}
 
           {/* Password Fields */}
-          {[ 
-            { name: "password", label: "Password", show: showPassword, setShow: setShowPassword },
-            { name: "confirmPassword", label: "Confirm Password", show: showConfirmPassword, setShow: setShowConfirmPassword },
-          ].map((field) => (
-            <div key={field.name} className="flex flex-col relative">
-              <label className="text-sm sm:text-base font-semibold text-gray-700 mb-1">
-                {field.label}
-              </label>
-              <input
-                name={field.name}
-                type={field.show ? "text" : "password"}
-                value={formData[field.name as keyof typeof formData]}
-                onChange={handleChange}
-                placeholder={`Enter ${field.label}`}
-                className="border border-black rounded-md px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#BC2A2A] text-black pr-10"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => field.setShow((prev) => !prev)}
-                className="absolute right-3 top-8 sm:top-9 hover:scale-110 transition"
-              >
-                <Image
-                  src={
-                    field.show
-                      ? "/resources/icons/hide.png"
-                      : "/resources/icons/show.png"
-                  }
-                  alt={field.show ? "Hide Password" : "Show Password"}
-                  width={22}
-                  height={22}
+          {[{ name: "password", label: "Password", show: showPassword, setShow: setShowPassword },
+            { name: "confirmPassword", label: "Confirm Password", show: showConfirmPassword, setShow: setShowConfirmPassword }]
+            .map((field) => (
+              <div key={field.name} className="flex flex-col relative">
+                <label className="text-sm sm:text-base font-semibold text-gray-700 mb-1">
+                  {field.label}
+                </label>
+                <input
+                  name={field.name}
+                  type={field.show ? "text" : "password"}
+                  value={formData[field.name as keyof typeof formData]}
+                  onChange={handleChange}
+                  placeholder={`Enter ${field.label}`}
+                  className="border border-black rounded-md px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#BC2A2A] text-black pr-10"
+                  required
                 />
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  onClick={() => field.setShow((prev) => !prev)}
+                  className="absolute right-3 top-8 sm:top-9 text-gray-500 hover:scale-110 transition"
+                >
+                  <Image
+                    src={
+                      field.show
+                        ? "/resources/icons/hide.png"
+                        : "/resources/icons/show.png"
+                    }
+                    alt={field.show ? "Hide Password" : "Show Password"}
+                    width={27}
+                    height={22}
+                  />
+                </button>
+              </div>
+            ))}
 
           <button
             type="submit"

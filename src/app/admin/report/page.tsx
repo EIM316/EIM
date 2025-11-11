@@ -167,6 +167,12 @@ export default function AdminReportPage() {
           >
             <FileText className="w-5 h-5" /> Reports
           </button>
+          <button
+            onClick={() => router.push("/admin/emails")}
+            className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#3d6530]"
+          >
+            <Mail className="w-5 h-5" /> Allowed Email
+          </button>
         </nav>
 
         <div className="mt-auto border-t border-white/20 pt-4">
@@ -294,6 +300,13 @@ export default function AdminReportPage() {
               >
                 <FileText className="w-5 h-5" /> Reports
               </button>
+              <button
+                onClick={() => router.push("/admin/emails")}
+                className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#3d6530]"
+              >
+                <Mail className="w-5 h-5" /> Allowed Email
+              </button>
+              
             </nav>
 
             <div className="mt-auto">

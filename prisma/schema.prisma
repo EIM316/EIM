@@ -467,3 +467,18 @@ model Report {
   @@map("reports")
   @@schema("eim")
 }
+
+model AllowedEmail {
+  id          String    @id @default(uuid()) @db.Uuid
+  entry_type  String    @db.VarChar(20) // 'email' or 'domain'
+  value       String    @db.VarChar(255)
+  description String?   @db.Text
+  active      Boolean   @default(true)
+  created_by  String?   @db.Uuid
+  created_at  DateTime  @default(now()) @db.Timestamp(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@unique([entry_type, value])
+  @@map("allowed_emails")
+  @@schema("eim")
+}

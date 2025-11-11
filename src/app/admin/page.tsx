@@ -9,6 +9,7 @@ import {
   X,
   LayoutDashboard,
   FileText,
+  Mail,
 } from "lucide-react";
 import Swal from "sweetalert2";
 
@@ -173,6 +174,15 @@ export default function AdminPage() {
           >
             <FileText className="w-5 h-5" /> Reports
           </button>
+          <button
+        onClick={() => {
+          router.push("/admin/emails");
+          setMenuOpen(false);
+        }}
+        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#3d6530] transition"
+      >
+       <Mail className="w-5 h-5" /> Allowed Email
+      </button>
         </nav>
 
         <div className="mt-auto border-t border-white/20 pt-4">
@@ -239,6 +249,15 @@ export default function AdminPage() {
         className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#3d6530] transition"
       >
         <FileText className="w-5 h-5" /> Reports
+      </button>
+      <button
+        onClick={() => {
+          router.push("/admin/emails");
+          setMenuOpen(false);
+        }}
+        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#3d6530] transition"
+      >
+       <Mail className="w-5 h-5" /> Allowed Email
       </button>
     </nav>
   </div>
