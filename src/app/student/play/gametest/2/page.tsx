@@ -495,7 +495,7 @@ const finishGame = async () => {
     width: "420px",
   });
 
-  router.push("/student/play/gametest");
+  router.push("/student/play/");
 };
 
 
