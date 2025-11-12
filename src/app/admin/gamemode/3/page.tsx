@@ -424,10 +424,18 @@ const openOptionBankChoose = async (slotIndex: number) => {
 
 
   const handleSaveOption = async () => {
-  if (!modalOptionName || !modalOptionFile) {
-    Swal.fire("Name and image required", "", "warning");
-    return;
-  }
+  if (!modalOptionName.trim() && !modalOptionFile) {
+  // No input — just close modal (not adding anything)
+  setShowOptionBankModal(false);
+  return;
+}
+
+if (!modalOptionName.trim() || !modalOptionFile) {
+  Swal.fire("Please provide both name and image to add a new option.", "", "warning");
+  return;
+}
+
+
 
   try {
     // ✅ Upload image to Cloudinary via your existing endpoint
@@ -534,6 +542,78 @@ const handleDeleteOption = async (id: number) => {
   setSelectedBoxId(null);
 };
 
+const handleDeleteSet = async (setId: number, setName: string) => {
+  const confirm = await Swal.fire({
+    title: `Delete "${setName}"?`,
+    text: "This will permanently delete the set and all associated data.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Yes, delete it",
+    cancelButtonText: "Cancel",
+    confirmButtonColor: "#d33",
+    cancelButtonColor: "#3085d6",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  try {
+    const res = await fetch(`/api/gamemode3/set/delete2?id=${setId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Failed to delete set");
+
+    setSets((prev) => prev.filter((s) => s.id !== setId));
+    Swal.fire("Deleted!", `"${setName}" has been removed.`, "success");
+  } catch (err) {
+    console.error(err);
+    Swal.fire("Error", "Failed to delete set.", "error");
+  }
+};
+
+const handleDeleteOptionFromBank = async (id: number, name: string) => {
+  try {
+    const confirm = await Swal.fire({
+      title: `Delete "${name}"?`,
+      text: "This option will be permanently removed from the database.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, delete it",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    // ✅ Delete from database
+    const res = await fetch(`/api/gamemode3/option/delete?id=${id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) throw new Error("Failed to delete option");
+
+    // ✅ Update local state
+    setOptionBank((prev) => prev.filter((x) => x.id !== id));
+    setCorrectAnswers((prev) => prev.map((a) => (a?.id === id ? null : a)));
+
+    // ✅ Show success modal
+    await Swal.fire({
+      icon: "success",
+      title: "Option Deleted!",
+      text: `"${name}" has been removed successfully.`,
+      confirmButtonText: "OK",
+      confirmButtonColor: "#548E28",
+    });
+  } catch (err) {
+    console.error("❌ Error deleting option:", err);
+    Swal.fire({
+      icon: "error",
+      title: "Failed to Delete",
+      text: "Something went wrong while deleting this option.",
+      confirmButtonColor: "#d33",
+    });
+  }
+};
+
+
 
   /* ---------- cleanup audio on unmount ---------- */
   useEffect(() => {
@@ -592,6 +672,17 @@ const handleDeleteOption = async (id: number) => {
                 >
                   <Settings className="w-5 h-5" />
                 </button>
+                <button
+  onClick={(e) => {
+    e.stopPropagation();
+    handleDeleteSet(s.id, s.name);
+  }}
+  className="bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition ml-2"
+  title="Delete Set"
+>
+  <Trash2 className="w-5 h-5" />
+</button>
+
               </div>
               <p className="text-sm mt-2 text-center">
                 Created on <br />
@@ -785,7 +876,12 @@ const handleDeleteOption = async (id: number) => {
                                 <p className="font-semibold">{o.name}</p>
                                
                               </div>
-                              <Trash2 className="w-4 h-4 text-red-500 cursor-pointer" onClick={() => handleDeleteOption(o.id)} />
+<Trash2
+  className="w-4 h-4 text-red-500 cursor-pointer"
+  onClick={() => handleDeleteOptionFromBank(o.id, o.name)}
+/>
+
+
                             </div>
                           ))}
                         </div>
@@ -912,12 +1008,11 @@ const handleDeleteOption = async (id: number) => {
                   {o.filename}
                 </p>
               </div>
-              <Trash2
-                className="w-4 h-4 text-red-500 cursor-pointer"
-                onClick={() =>
-                  setOptionBank((prev) => prev.filter((x) => x.id !== o.id))
-                }
-              />
+             <Trash2
+  className="w-4 h-4 text-red-500 cursor-pointer"
+  onClick={() => handleDeleteOptionFromBank(o.id, o.name)}
+/>
+
             </div>
           ))
         )}

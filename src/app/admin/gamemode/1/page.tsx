@@ -538,6 +538,35 @@ const handleSaveTheme = async () => {
 };
 
 
+const handleDeleteLevel = async (levelId: number, levelNumber: number) => {
+  const confirm = await Swal.fire({
+    title: `Delete Level ${levelNumber}?`,
+    text: "This will permanently delete this level and all its questions.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    cancelButtonColor: "#3085d6",
+    confirmButtonText: "Yes, delete it",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  try {
+    const res = await fetch(`/api/gamemode1/level/delete?id=${levelId}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) throw new Error("Failed to delete level");
+
+    // remove from UI
+    setLevels((prev) => prev.filter((l) => l.id !== levelId));
+
+    Swal.fire("Deleted!", `Level ${levelNumber} and its questions were removed.`, "success");
+  } catch (err) {
+    console.error(err);
+    Swal.fire("Error", "Failed to delete level.", "error");
+  }
+};
 
 
 
@@ -607,6 +636,17 @@ const handleSaveTheme = async () => {
                 >
                   <Settings className="w-5 h-5" />
                 </button>
+                <button
+  onClick={(e) => {
+    e.stopPropagation();
+    handleDeleteLevel(level.id, level.level_number);
+  }}
+  className="bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition ml-2"
+  title="Delete Level"
+>
+  <Trash2 className="w-5 h-5" />
+</button>
+
               </div>
               <p className="text-sm mt-2 text-center">
                 Created by {level.admin_id} <br />

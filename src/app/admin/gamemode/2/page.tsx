@@ -108,34 +108,48 @@ useEffect(() => {
   fetchSavedTheme();
 }, []);
 
+// ✅ FETCH BOTH GameMode 1 + 2
 const fetchQuestions = async () => {
   try {
     setLoading(true);
+    console.log("🟢 [FETCH] Loading GameMode 1 + 2 questions...");
 
-    // 🔹 Fetch both gamemode1 and gamemode2 in parallel
-    const [res1, res2] = await Promise.all([
+    const [res1, res2] = await Promise.allSettled([
       fetch("/api/gamemode1/list-all"),
       fetch("/api/gamemode2/list"),
     ]);
 
-    if (!res1.ok || !res2.ok) throw new Error("Failed to fetch one or both question sets");
+    const data1 =
+      res1.status === "fulfilled" && res1.value.ok ? await res1.value.json() : [];
+    const data2 =
+      res2.status === "fulfilled" && res2.value.ok ? await res2.value.json() : [];
 
-    const [data1, data2] = await Promise.all([res1.json(), res2.json()]);
+    console.log("📦 GameMode1 Raw Data:", data1);
+    console.log("📦 GameMode2 Raw Data:", data2);
 
-    // 🔹 Merge both lists and tag their origin
-    const combined = [
-      ...data1.map((q: any) => ({ ...q, mode: "GameMode 1" })),
-      ...data2.map((q: any) => ({ ...q, mode: "GameMode 2" })),
-    ];
+    const gm1 = data1.map((q: any) => ({ ...q, mode: "GameMode 1" }));
+    const gm2 = data2.map((q: any) => ({ ...q, mode: "GameMode 2" }));
 
-    // Optional: sort combined list (by id or alphabetically)
-    combined.sort((a, b) => a.id - b.id);
+    const combined = [...gm1, ...gm2].sort((a, b) => a.id - b.id);
+
+    console.table(
+      combined.map((q) => ({
+        id: q.id,
+        question: q.question_text || q.question,
+        mode: q.mode,
+      }))
+    );
+
+    const mode1Count = combined.filter((q) => q.mode === "GameMode 1").length;
+    const mode2Count = combined.filter((q) => q.mode === "GameMode 2").length;
+    console.log(`📊 Mode Count → GameMode 1: ${mode1Count}, GameMode 2: ${mode2Count}`);
 
     setQuestions(combined);
   } catch (error) {
-    console.error(error);
+    console.error("❌ [FETCH] Failed to fetch questions:", error);
     Swal.fire("Error", "Failed to load questions.", "error");
   } finally {
+    console.log("🔵 [FETCH] Done fetching question data.");
     setLoading(false);
   }
 };
@@ -219,21 +233,11 @@ const handleSaveSettings = async () => {
   }
 };
 
-// ✅ Open Add/Edit Modal
-const openModal = (question?: Question) => {
-  // 🚫 Prevent editing questions from GameMode 1
-  if (question && question.mode !== "GameMode 2") {
-    Swal.fire({
-      title: "Notice",
-      text: "To update or remove this, please go to Game Mode 1.",
-      icon: "info",
-      confirmButtonText: "OK",
-    });
-    return; // stop opening modal
-  }
-
-  setSelectedQuestion(
-    question || {
+// ✅ Strict, safe openModal for GameMode 2
+const openModal = (q?: Question) => {
+  // ➕ Adding new
+  if (!q) {
+    setSelectedQuestion({
       id: 0,
       question: "",
       option_a: "",
@@ -241,16 +245,34 @@ const openModal = (question?: Question) => {
       option_c: "",
       option_d: "",
       answer: "A",
-      level_id: null,
       question_image: null,
       option_a_image: null,
       option_b_image: null,
       option_c_image: null,
       option_d_image: null,
+      level_id: null,
       mode: "GameMode 2",
-    }
-  );
-  setEditMode(!!question);
+    });
+    setEditMode(false);
+    setShowModal(true);
+    return;
+  }
+
+  // 🔒 Prevent editing non–GameMode 2
+  const mode = (q.mode || "").trim().toLowerCase();
+  if (!mode.includes("2")) {
+    Swal.fire({
+      title: "Access Denied",
+      text: `This question belongs to ${q.mode || "another mode"} and cannot be edited here.`,
+      icon: "info",
+      confirmButtonText: "OK",
+    });
+    return;
+  }
+
+  // ✅ Allowed — open modal
+  setSelectedQuestion(q);
+  setEditMode(true);
   setShowModal(true);
 };
 
@@ -259,20 +281,11 @@ const openModal = (question?: Question) => {
     setShowModal(false);
     setSelectedQuestion(null);
   };
-
- // ✅ Save Question
 const handleSaveQuestion = async () => {
   if (!selectedQuestion) return;
 
-  // 🚫 Prevent saving/updating GameMode 1 questions
   if (editMode && selectedQuestion.mode !== "GameMode 2") {
-    Swal.fire({
-      title: "Notice",
-      text: "To update this question, please go to Game Mode 1.",
-      icon: "info",
-      confirmButtonText: "OK",
-    });
-    closeModal();
+    Swal.fire("Notice", "You can only update GameMode 2 questions here.", "info");
     return;
   }
 
@@ -286,28 +299,26 @@ const handleSaveQuestion = async () => {
       body: JSON.stringify(selectedQuestion),
     });
 
-    if (!res.ok) throw new Error("Failed to save question");
+    if (!res.ok) throw new Error(await res.text());
     await fetchQuestions();
     Swal.fire("Success", "Question saved successfully!", "success");
     closeModal();
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error("❌ Save failed:", err);
     Swal.fire("Error", "Failed to save question.", "error");
   }
 };
 
- // ✅ Delete Question
-const handleDelete = async (id: number) => {
-  const target = questions.find((q) => q.id === id);
 
-  // 🚫 Prevent deleting GameMode 1 questions
-  if (target && target.mode !== "GameMode 2") {
-    Swal.fire({
-      title: "Notice",
-      text: "To update or remove this, please go to Game Mode 1.",
-      icon: "info",
-      confirmButtonText: "OK",
-    });
+// ✅ Smart Delete — detects correct table before deleting
+const handleDelete = async (id: number) => {
+  console.log("🟠 [DELETE] Triggered for question ID:", id);
+
+  const target = questions.find((q) => q.id === id);
+  console.log("🔍 [DELETE] Found target:", target);
+
+  if (!target) {
+    Swal.fire("Error", "Question not found.", "error");
     return;
   }
 
@@ -318,20 +329,35 @@ const handleDelete = async (id: number) => {
     showCancelButton: true,
     confirmButtonColor: "#d33",
     cancelButtonColor: "#aaa",
-    confirmButtonText: "Yes, delete it",
   });
 
-  if (!confirm.isConfirmed) return;
+  if (!confirm.isConfirmed) {
+    console.log("🟡 [DELETE] User canceled.");
+    return;
+  }
 
   try {
-    const res = await fetch(`/api/gamemode2/delete?id=${id}`, { method: "DELETE" });
-    if (!res.ok) throw new Error("Failed to delete");
+    console.log("🧭 [DELETE] Sending to smart route → /api/delete-question");
+    const res = await fetch(`/api/delete-question?id=${id}`, {
+      method: "DELETE",
+    });
+
+    const data = await res.json();
+    console.log("📨 [DELETE] Server response:", data);
+
+    if (!res.ok) {
+      Swal.fire("Error", data.error || "Failed to delete question.", "error");
+      return;
+    }
+
+    Swal.fire("Deleted!", `Deleted from ${data.deletedFrom}`, "success");
     await fetchQuestions();
-    Swal.fire("Deleted!", "Question removed.", "success");
   } catch (err) {
-    Swal.fire("Error", "Could not delete question.", "error");
+    console.error("🔥 [DELETE] Exception:", err);
+    Swal.fire("Error", "Failed to delete question.", "error");
   }
 };
+
 
 
   // ✅ Play Preview
