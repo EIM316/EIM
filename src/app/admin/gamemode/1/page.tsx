@@ -690,7 +690,7 @@ const handleDeleteLevel = async (levelId: number, levelNumber: number) => {
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-semibold mb-4 text-[#548E28]">
-              Questions (Level {currentLevel})
+              Questions 
             </h2>
 
             {loadingQuestions ? (

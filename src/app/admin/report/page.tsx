@@ -234,7 +234,7 @@ export default function AdminReportPage() {
                 >
                   <div className="flex justify-between items-center">
                     <p className="font-semibold text-[#548E28] capitalize">
-                      {r.userType === "teacher" ? "👨‍🏫 Teacher" : "🎓 Student"} (
+                      {r.userType === "👨 Anonymous" ? "👨 Anonymous" : "👨 Anonymous"} (
                       {r.id_number})
                     </p>
                     <span
