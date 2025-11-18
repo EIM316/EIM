@@ -309,19 +309,29 @@ const handleSaveQuestion = async () => {
   }
 };
 
-
-// ✅ Smart Delete — detects correct table before deleting
+// ✅ Strict Delete — Only allow deleting GameMode 2 questions
 const handleDelete = async (id: number) => {
   console.log("🟠 [DELETE] Triggered for question ID:", id);
 
   const target = questions.find((q) => q.id === id);
-  console.log("🔍 [DELETE] Found target:", target);
 
   if (!target) {
     Swal.fire("Error", "Question not found.", "error");
     return;
   }
 
+  // 🔒 BLOCK deletion of questions NOT belonging to GameMode 2
+  const mode = (target.mode || "").trim().toLowerCase();
+  if (!mode.includes("2")) {
+    Swal.fire({
+      title: "Deletion Not Allowed",
+      text: `You cannot delete ${target.mode}. Only GameMode 2 questions can be deleted here.`,
+      icon: "error",
+    });
+    return;
+  }
+
+  // Confirm delete
   const confirm = await Swal.fire({
     title: "Delete Question?",
     text: "This action cannot be undone.",
@@ -331,32 +341,29 @@ const handleDelete = async (id: number) => {
     cancelButtonColor: "#aaa",
   });
 
-  if (!confirm.isConfirmed) {
-    console.log("🟡 [DELETE] User canceled.");
-    return;
-  }
+  if (!confirm.isConfirmed) return;
 
   try {
-    console.log("🧭 [DELETE] Sending to smart route → /api/delete-question");
-    const res = await fetch(`/api/delete-question?id=${id}`, {
+    console.log("🧭 [DELETE] Deleting ONLY from GameMode 2");
+    const res = await fetch(`/api/gamemode2/delete?id=${id}`, {
       method: "DELETE",
     });
 
     const data = await res.json();
-    console.log("📨 [DELETE] Server response:", data);
 
     if (!res.ok) {
       Swal.fire("Error", data.error || "Failed to delete question.", "error");
       return;
     }
 
-    Swal.fire("Deleted!", `Deleted from ${data.deletedFrom}`, "success");
+    Swal.fire("Deleted!", "GameMode 2 question removed successfully.", "success");
     await fetchQuestions();
   } catch (err) {
     console.error("🔥 [DELETE] Exception:", err);
     Swal.fire("Error", "Failed to delete question.", "error");
   }
 };
+
 
 
 
