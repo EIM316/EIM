@@ -25,9 +25,29 @@ export default function TeacherRegisterPage() {
 
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showPasswordInfo, setShowPasswordInfo] = useState(false);
+
 
   const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const [loadingDomains, setLoadingDomains] = useState<boolean>(true);
+
+
+    const getPasswordStatus = (password: string) => {
+  return {
+    length: password.length >= 8,
+    capital: /[A-Z]/.test(password),
+    number: /\d/.test(password),
+    special: /[!@#$%^&*(),.?":{}|<>_\-+=;'/\\[\]`~]/.test(password),
+  };
+};
+
+const [passwordStatus, setPasswordStatus] = useState({
+  length: false,
+  capital: false,
+  number: false,
+  special: false,
+});
+
 
   const [validationMsg, setValidationMsg] = useState({
     email: "",
@@ -85,6 +105,9 @@ export default function TeacherRegisterPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+        if (name === "password") {
+  setPasswordStatus(getPasswordStatus(value));
+}
   };
 
   // ✅ Live validation
@@ -340,41 +363,83 @@ export default function TeacherRegisterPage() {
             </div>
           ))}
 
-          {/* Password Fields */}
-          {[{ name: "password", label: "Password", show: showPassword, setShow: setShowPassword },
-            { name: "confirmPassword", label: "Confirm Password", show: showConfirmPassword, setShow: setShowConfirmPassword }]
-            .map((field) => (
-              <div key={field.name} className="flex flex-col relative">
-                <label className="text-sm sm:text-base font-semibold text-gray-700 mb-1">
-                  {field.label}
-                </label>
-                <input
-                  name={field.name}
-                  type={field.show ? "text" : "password"}
-                  value={formData[field.name as keyof typeof formData]}
-                  onChange={handleChange}
-                  placeholder={`Enter ${field.label}`}
-                  className="border border-black rounded-md px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#BC2A2A] text-black pr-10"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => field.setShow((prev) => !prev)}
-                  className="absolute right-3 top-8 sm:top-9 text-gray-500 hover:scale-110 transition"
-                >
-                  <Image
-                    src={
-                      field.show
-                        ? "/resources/icons/hide.png"
-                        : "/resources/icons/show.png"
-                    }
-                    alt={field.show ? "Hide Password" : "Show Password"}
-                    width={27}
-                    height={22}
-                  />
-                </button>
-              </div>
-            ))}
+                  {[
+          { name: "password", label: "Password", show: showPassword, setShow: setShowPassword },
+         
+           { name: "confirmPassword", label: "Confirm Password", show: showConfirmPassword, setShow: setShowConfirmPassword }
+         ].map((field) => (
+           <div key={field.name} className="flex flex-col relative">
+             <label className="text-sm sm:text-base font-semibold text-gray-700 mb-1 flex items-center">
+               {field.label}
+         
+               {/* ℹ️ Info Button */}
+               {field.name === "password" && (
+                 <button
+                   type="button"
+                   onClick={() => setShowPasswordInfo((prev) => !prev)}
+                   className="ml-2 text-gray-600 hover:text-black"
+                 >
+                   <Image
+                     src="/resources/info.jpg"
+                     alt="Password Info"
+                     width={15}
+                     height={15}
+                   />
+                 </button>
+               )}
+             </label>
+         
+             <input
+               name={field.name}
+               type={field.show ? "text" : "password"}
+               value={(formData as any)[field.name]}
+               onChange={handleChange}
+               placeholder={`Enter ${field.label}`}
+               className="border border-black rounded-md px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#BC2A2A] text-black pr-10"
+               required
+             />
+         
+             {/* 👁 Show/Hide toggle */}
+             <button
+               type="button"
+               onClick={() => field.setShow((prev) => !prev)}
+               className="absolute right-3 top-8 sm:top-9 text-gray-500 hover:scale-110 transition"
+             >
+               <Image
+                 src={field.show ? "/resources/icons/hide.png" : "/resources/icons/show.png"}
+                 alt={field.show ? "Hide Password" : "Show Password"}
+                 width={27}
+                 height={22}
+               />
+             </button>
+         
+             {/* ℹ️ Tooltip for password requirements */}
+             {field.name === "password" && showPasswordInfo && (
+               <div className="absolute top-14 left-0 bg-white border border-gray-300 rounded-md shadow-md p-3 w-64 text-xs z-50">
+                 <p className="font-semibold text-gray-700 mb-1">Password Requirements:</p>
+                 <ul className="text-gray-600 space-y-1">
+           <li className={passwordStatus.length ? "text-green-600" : "text-red-600"}>
+             {passwordStatus.length ? "✔" : "✘"} At least 8 characters
+           </li>
+         
+           <li className={passwordStatus.capital ? "text-green-600" : "text-red-600"}>
+             {passwordStatus.capital ? "✔" : "✘"} At least 1 uppercase letter
+           </li>
+         
+           <li className={passwordStatus.number ? "text-green-600" : "text-red-600"}>
+             {passwordStatus.number ? "✔" : "✘"} At least 1 number
+           </li>
+         
+           <li className={passwordStatus.special ? "text-green-600" : "text-red-600"}>
+             {passwordStatus.special ? "✔" : "✘"} At least 1 special character
+           </li>
+         </ul>
+         
+               </div>
+             )}
+         
+           </div>
+         ))}
 
           <button
             type="submit"

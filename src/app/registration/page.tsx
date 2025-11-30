@@ -27,7 +27,7 @@ export default function RegisterPage() {
 
         {/* Optional right side button */}
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/login")}
           className="bg-white text-[#BC2A2A] px-4 py-1.5 rounded-md font-semibold text-sm hover:bg-gray-100 transition"
         >
           Back

@@ -92,6 +92,12 @@ export default function StudentPage() {
       Swal.fire("Error", "Please enter a class code.", "error");
       return;
     }
+    // ✅ Prevent joining the same class you're already in
+if (classInfo && classCode.trim().toUpperCase() === classInfo.class_code.toUpperCase()) {
+  Swal.fire("Notice", "You are still in the same class.", "info");
+  return;
+}
+
 
     setJoining(true);
     try {
