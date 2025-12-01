@@ -272,18 +272,20 @@ export default function PlayPage() {
               <h3 className="text-lg font-bold">📖 Game User Manual</h3>
             </div>
 
-            {/* PDF Viewer */}
-            <div className="w-full h-[calc(100%-60px)] bg-gray-100">
-<iframe
-  src={`https://docs.google.com/viewer?url=${encodeURIComponent(
-    "https://drive.google.com/uc?export=download&id=1230Pxr03zORQt-0wKX7hs1CVuICbBuwl"
-  )}&embedded=true`}
-  className="w-full h-full border-0"
-  title="Game User Manual"
-/>
+{/* Image-based Manual Viewer */}
+<div className="w-full h-[calc(100%-60px)] bg-gray-100 overflow-y-auto p-4 space-y-4">
+  {Array.from({ length: 18 }, (_, i) => (
+    <Image
+      key={i}
+      src={`/resources/manual/${i + 1}.jpg`}
+      alt={`Page ${i + 1}`}
+      width={1000}
+      height={1400}
+      className="w-full h-auto rounded-lg shadow"
+    />
+  ))}
+</div>
 
-
-            </div>
           </div>
         </div>
       )}
