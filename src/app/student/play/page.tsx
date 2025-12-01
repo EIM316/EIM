@@ -1,13 +1,5 @@
 "use client";
 
-declare global {
-  interface Window {
-    Android?: {
-      saveBase64ToDownloads?: (base64Data: string, filename: string) => void;
-    };
-  }
-}
-
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -23,12 +15,9 @@ export default function PlayPage() {
   const [currentVideo, setCurrentVideo] = useState<string>("");
   const [videoTitle, setVideoTitle] = useState<string>("");
   const [currentRoute, setCurrentRoute] = useState<string>("");
-  const [showManualOptions, setShowManualOptions] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
 
-  const pdfUrl = "https://drive.google.com/file/d/1230Pxr03zORQt-0wKX7hs1CVuICbBuwl/view?usp=sharing";
-  const pdfDirectUrl = "https://drive.google.com/uc?export=download&id=1230Pxr03zORQt-0wKX7hs1CVuICbBuwl";
-  const pdfEmbedUrl = "https://drive.google.com/file/d/1230Pxr03zORQt-0wKX7hs1CVuICbBuwl/preview";
+  const pdfUrl = "/resources/EIM.pdf";
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
@@ -80,123 +69,6 @@ export default function PlayPage() {
     if (currentRoute) {
       router.push(currentRoute);
     }
-  };
-
-  const handleDownloadManual = async () => {
-    try {
-      setShowManualOptions(false);
-      
-      // Show loading indicator
-      Swal.fire({
-        title: "Preparing download...",
-        text: "Please wait",
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading();
-        },
-      });
-
-      // Check if running on Android app
-      if (typeof window !== "undefined" && window.Android?.saveBase64ToDownloads) {
-        const response = await fetch(pdfDirectUrl, {
-          mode: 'cors',
-          credentials: 'omit'
-        });
-        
-        if (!response.ok) throw new Error('Failed to fetch PDF');
-        
-        const blob = await response.blob();
-        const reader = new FileReader();
-        
-        reader.onloadend = () => {
-          const base64data = reader.result?.toString().split(',')[1];
-          if (base64data && window.Android?.saveBase64ToDownloads) {
-            window.Android.saveBase64ToDownloads(base64data, "Game_Manual.pdf");
-            Swal.fire({
-              icon: "success",
-              title: "Downloaded!",
-              text: "User manual saved to Downloads folder",
-              confirmButtonColor: "#7b2020",
-            });
-          }
-        };
-        
-        reader.onerror = () => {
-          throw new Error('Failed to read file');
-        };
-        
-        reader.readAsDataURL(blob);
-      } else {
-        // For web browsers - use proxy approach or direct download
-        try {
-          // Try direct download first
-          const response = await fetch('/api/download-pdf', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              url: pdfDirectUrl
-            })
-          });
-
-          if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'Game_Manual.pdf';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-
-            Swal.fire({
-              icon: "success",
-              title: "Downloading...",
-              text: "User manual is being downloaded",
-              confirmButtonColor: "#7b2020",
-              timer: 2000,
-            });
-          } else {
-            // Fallback: open in new tab
-            window.open(pdfUrl, '_blank');
-            Swal.fire({
-              icon: "info",
-              title: "Opening Manual",
-              text: "Manual opened in a new tab",
-              confirmButtonColor: "#7b2020",
-              timer: 2000,
-            });
-          }
-        } catch (fetchError) {
-          // Final fallback: open in new tab
-          window.open(pdfUrl, '_blank');
-          Swal.fire({
-            icon: "info",
-            title: "Opening Manual",
-            text: "Manual opened in a new tab",
-            confirmButtonColor: "#7b2020",
-            timer: 2000,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Download error:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Download Failed",
-        text: "Could not download the manual. Opening in new tab instead.",
-        confirmButtonColor: "#7b2020",
-      }).then(() => {
-        window.open(pdfUrl, '_blank');
-      });
-    }
-  };
-
-  const handleViewManual = () => {
-    setShowManualOptions(false);
-    setShowPdfViewer(true);
   };
 
   if (!user) {
@@ -270,7 +142,7 @@ export default function PlayPage() {
 
         {/* Tutorial Button */}
         <button
-          onClick={() => setShowManualOptions(true)}
+          onClick={() => setShowPdfViewer(true)}
           className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-md transition flex items-center gap-2"
         >
           <span className="text-sm font-medium">📖 Tutorial</span>
@@ -375,49 +247,6 @@ export default function PlayPage() {
         </div>
       )}
 
-      {/* ✅ Manual Options Modal */}
-      {showManualOptions && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4">
-          <div className="relative w-full max-w-md bg-white rounded-lg shadow-2xl overflow-hidden">
-            {/* Close Button */}
-            <button
-              onClick={() => setShowManualOptions(false)}
-              className="absolute top-3 right-3 z-20 bg-[#7b2020] hover:bg-[#5a1515] text-white rounded-full p-2 transition-all"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {/* Header */}
-            <div className="bg-[#7b2020] text-white px-6 py-4">
-              <h3 className="text-lg font-bold">📖 Game User Manual</h3>
-            </div>
-
-            {/* Options */}
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-600 text-center mb-4">
-                Choose how you want to access the game manual
-              </p>
-
-              <button
-                onClick={handleViewManual}
-                className="w-full bg-[#7b2020] hover:bg-[#5a1515] text-white px-6 py-3 rounded-md transition-all flex items-center justify-center gap-3"
-              >
-                <span className="text-2xl"></span>
-                <span className="font-medium">View Manual</span>
-              </button>
-
-              <button
-                onClick={handleDownloadManual}
-                className="w-full bg-[#548E28] hover:bg-[#3e6a20] text-white px-6 py-3 rounded-md transition-all flex items-center justify-center gap-3"
-              >
-                <span className="text-2xl"></span>
-                <span className="font-medium">Download Manual</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ✅ PDF Viewer Modal */}
       {showPdfViewer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 p-4">
@@ -425,28 +254,23 @@ export default function PlayPage() {
             {/* Close Button */}
             <button
               onClick={() => setShowPdfViewer(false)}
-              className="absolute top-3 right-3 z-20 bg-[#7b2020] hover:bg-[#5a1515] text-white rounded-full p-2 transition-all"
+              className="absolute top-3 right-3 z-20 bg-[#7b2020] hover:bg-[#5a1515] text-white rounded-full p-2 transition-all shadow-lg"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Header */}
-            <div className="bg-[#7b2020] text-white px-6 py-3 flex items-center justify-between">
+            <div className="bg-[#7b2020] text-white px-6 py-3">
               <h3 className="text-lg font-bold">📖 Game User Manual</h3>
-              <button
-                onClick={handleDownloadManual}
-                className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-md text-sm transition"
-              >
-                 Download
-              </button>
             </div>
 
             {/* PDF Viewer */}
-            <div className="w-full h-[calc(100%-60px)]">
+            <div className="w-full h-[calc(100%-60px)] bg-gray-100 relative">
               <iframe
-                src={pdfEmbedUrl}
+                src={pdfUrl}
                 className="w-full h-full border-0"
                 title="Game User Manual"
+                type="application/pdf"
               ></iframe>
             </div>
           </div>
