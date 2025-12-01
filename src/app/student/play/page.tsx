@@ -1,5 +1,13 @@
 "use client";
 
+declare global {
+  interface Window {
+    Android?: {
+      saveBase64ToDownloads?: (base64Data: string, filename: string) => void;
+    };
+  }
+}
+
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -15,6 +23,12 @@ export default function PlayPage() {
   const [currentVideo, setCurrentVideo] = useState<string>("");
   const [videoTitle, setVideoTitle] = useState<string>("");
   const [currentRoute, setCurrentRoute] = useState<string>("");
+  const [showManualOptions, setShowManualOptions] = useState(false);
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
+
+  const pdfUrl = "https://drive.google.com/file/d/1230Pxr03zORQt-0wKX7hs1CVuICbBuwl/view?usp=sharing";
+  const pdfDirectUrl = "https://drive.google.com/uc?export=download&id=1230Pxr03zORQt-0wKX7hs1CVuICbBuwl";
+  const pdfEmbedUrl = "https://drive.google.com/file/d/1230Pxr03zORQt-0wKX7hs1CVuICbBuwl/preview";
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
@@ -66,6 +80,61 @@ export default function PlayPage() {
     if (currentRoute) {
       router.push(currentRoute);
     }
+  };
+
+  const handleDownloadManual = async () => {
+    try {
+      // Check if running on Android app
+      if (typeof window !== "undefined" && window.Android?.saveBase64ToDownloads) {
+        const response = await fetch(pdfDirectUrl);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        
+        reader.onloadend = () => {
+          const base64data = reader.result?.toString().split(',')[1];
+          if (base64data && window.Android?.saveBase64ToDownloads) {
+            window.Android.saveBase64ToDownloads(base64data, "Game_Manual.pdf");
+            Swal.fire({
+              icon: "success",
+              title: "Downloaded!",
+              text: "User manual saved to Downloads folder",
+              confirmButtonColor: "#7b2020",
+            });
+          }
+        };
+        reader.readAsDataURL(blob);
+      } else {
+        // Regular browser download
+        const link = document.createElement("a");
+        link.href = pdfDirectUrl;
+        link.download = "Game_Manual.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        Swal.fire({
+          icon: "success",
+          title: "Downloading...",
+          text: "User manual is being downloaded",
+          confirmButtonColor: "#7b2020",
+          timer: 2000,
+        });
+      }
+      setShowManualOptions(false);
+    } catch (error) {
+      console.error("Download error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Download Failed",
+        text: "Could not download the manual. Please try again.",
+        confirmButtonColor: "#7b2020",
+      });
+    }
+  };
+
+  const handleViewManual = () => {
+    setShowManualOptions(false);
+    setShowPdfViewer(true);
   };
 
   if (!user) {
@@ -136,6 +205,14 @@ export default function PlayPage() {
             {user.first_name?.toUpperCase()}
           </span>
         </div>
+
+        {/* Tutorial Button */}
+        <button
+          onClick={() => setShowManualOptions(true)}
+          className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-md transition flex items-center gap-2"
+        >
+          <span className="text-sm font-medium">📖 Tutorial</span>
+        </button>
       </header>
 
       {/* ✅ Main content */}
@@ -231,6 +308,84 @@ export default function PlayPage() {
               >
                 Got it, let's play!
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Manual Options Modal */}
+      {showManualOptions && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4">
+          <div className="relative w-full max-w-md bg-white rounded-lg shadow-2xl overflow-hidden">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowManualOptions(false)}
+              className="absolute top-3 right-3 z-20 bg-[#7b2020] hover:bg-[#5a1515] text-white rounded-full p-2 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header */}
+            <div className="bg-[#7b2020] text-white px-6 py-4">
+              <h3 className="text-lg font-bold">📖 Game User Manual</h3>
+            </div>
+
+            {/* Options */}
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 text-center mb-4">
+                Choose how you want to access the game manual
+              </p>
+
+              <button
+                onClick={handleViewManual}
+                className="w-full bg-[#7b2020] hover:bg-[#5a1515] text-white px-6 py-3 rounded-md transition-all flex items-center justify-center gap-3"
+              >
+                <span className="text-2xl">👁️</span>
+                <span className="font-medium">View Manual</span>
+              </button>
+
+              <button
+                onClick={handleDownloadManual}
+                className="w-full bg-[#548E28] hover:bg-[#3e6a20] text-white px-6 py-3 rounded-md transition-all flex items-center justify-center gap-3"
+              >
+                <span className="text-2xl">📥</span>
+                <span className="font-medium">Download Manual</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ PDF Viewer Modal */}
+      {showPdfViewer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 p-4">
+          <div className="relative w-full max-w-5xl h-[90vh] bg-white rounded-lg shadow-2xl overflow-hidden">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowPdfViewer(false)}
+              className="absolute top-3 right-3 z-20 bg-[#7b2020] hover:bg-[#5a1515] text-white rounded-full p-2 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header */}
+            <div className="bg-[#7b2020] text-white px-6 py-3 flex items-center justify-between">
+              <h3 className="text-lg font-bold">📖 Game User Manual</h3>
+              <button
+                onClick={handleDownloadManual}
+                className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-md text-sm transition"
+              >
+                📥 Download
+              </button>
+            </div>
+
+            {/* PDF Viewer */}
+            <div className="w-full h-[calc(100%-60px)]">
+              <iframe
+                src={pdfEmbedUrl}
+                className="w-full h-full border-0"
+                title="Game User Manual"
+              ></iframe>
             </div>
           </div>
         </div>
