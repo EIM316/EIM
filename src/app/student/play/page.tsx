@@ -270,7 +270,6 @@ export default function PlayPage() {
                 src={pdfUrl}
                 className="w-full h-full border-0"
                 title="Game User Manual"
-                type="application/pdf"
               ></iframe>
             </div>
           </div>
