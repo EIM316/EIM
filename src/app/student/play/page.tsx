@@ -1,5 +1,13 @@
 "use client";
 
+declare global {
+  interface Window {
+    Android?: {
+      saveBase64ToDownloads?: (base64Data: string, filename: string) => void;
+    };
+  }
+}
+
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -17,7 +25,7 @@ export default function PlayPage() {
   const [currentRoute, setCurrentRoute] = useState<string>("");
   const [showPdfViewer, setShowPdfViewer] = useState(false);
 
-  const pdfUrl = "/resources/EIM.pdf";
+  const pdfEmbedUrl = "https://drive.google.com/file/d/1230Pxr03zORQt-0wKX7hs1CVuICbBuwl/preview";
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
@@ -265,12 +273,16 @@ export default function PlayPage() {
             </div>
 
             {/* PDF Viewer */}
-            <div className="w-full h-[calc(100%-60px)] bg-gray-100 relative">
-              <iframe
-                src={pdfUrl}
-                className="w-full h-full border-0"
-                title="Game User Manual"
-              ></iframe>
+            <div className="w-full h-[calc(100%-60px)] bg-gray-100">
+<iframe
+  src={`https://docs.google.com/viewer?url=${encodeURIComponent(
+    "https://drive.google.com/uc?export=download&id=1230Pxr03zORQt-0wKX7hs1CVuICbBuwl"
+  )}&embedded=true`}
+  className="w-full h-full border-0"
+  title="Game User Manual"
+/>
+
+
             </div>
           </div>
         </div>
