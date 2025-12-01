@@ -20,35 +20,34 @@ export default function WaitingRoomPage() {
   const [professorInfo, setProfessorInfo] = useState<any>(null);
 
   useEffect(() => {
-  if (typeof window === "undefined") return; // 🚫 stop during SSR
+    if (typeof window === "undefined") return;
 
-  const savedUserStr = localStorage.getItem("user");
-  if (!savedUserStr) {
-    router.push("/");
-    return;
-  }
+    const savedUserStr = localStorage.getItem("user");
+    if (!savedUserStr) {
+      router.push("/");
+      return;
+    }
 
-  const savedUser = JSON.parse(savedUserStr);
-  if (!savedUser?.id_number) {
-    router.push("/");
-    return;
-  }
+    const savedUser = JSON.parse(savedUserStr);
+    if (!savedUser?.id_number) {
+      router.push("/");
+      return;
+    }
 
-  const urlCode = searchParams.get("code");
-  const storedCode = localStorage.getItem("activeGameCode");
-  const codeToUse = urlCode || storedCode;
+    const urlCode = searchParams.get("code");
+    const storedCode = localStorage.getItem("activeGameCode");
+    const codeToUse = urlCode || storedCode;
 
-  if (!codeToUse) {
-    Swal.fire("Error", "No active game found.", "error").then(() =>
-      router.push("/student/play/classmode")
-    );
-    return;
-  }
+    if (!codeToUse) {
+      Swal.fire("Error", "No active game found.", "error").then(() =>
+        router.push("/student/play/classmode")
+      );
+      return;
+    }
 
-  setUser(savedUser);
-  setGameCode(codeToUse.toUpperCase());
-}, [router, searchParams]);
-
+    setUser(savedUser);
+    setGameCode(codeToUse.toUpperCase());
+  }, [router, searchParams]);
 
   /* ---------- Join lobby & listen for realtime events ---------- */
   useEffect(() => {
@@ -57,32 +56,44 @@ export default function WaitingRoomPage() {
 
     const joinLobby = async () => {
       try {
-        // ✅ Add or update player record (using name, not id_number)
-        await supabase.from("players").upsert(
-          {
-            game_code: gameCode,
-            name: user.first_name,
-            avatar: user.avatar || "/resources/avatars/student1.png",
-            is_active: true,
-          },
-          { onConflict: "game_code,name" }
-        );
+        // ✅ FIXED: Delete old entry first, then insert fresh
+        await supabase
+          .from("players")
+          .delete()
+          .eq("game_code", gameCode)
+          .eq("name", user.first_name);
 
+        // ✅ Now insert the player
+        const { error: insertError } = await supabase.from("players").insert({
+          game_code: gameCode,
+          name: user.first_name,
+          avatar: user.avatar || "/resources/avatars/student1.png",
+          is_active: true,
+          joined_at: new Date().toISOString(),
+        });
+
+        if (insertError) {
+          console.error("❌ Insert Error:", insertError);
+          throw insertError;
+        }
+
+        console.log("✅ Player joined successfully:", user.first_name);
         setConnected(true);
         setConnecting(false);
         await refreshPlayers();
 
-        // ✅ Optionally get professor/game details
+        // ✅ Get professor/game details
         const res = await fetch(`/api/classmode/validate?code=${gameCode}`);
-        const data = await res.json();
-        if (data.success) {
+        const gameData = await res.json();
+        if (gameData.success) {
           setProfessorInfo({
-            name: data.game.teacher_id || "PROFESSOR",
-            game_type: data.game.game_type?.replace("_", " ").toUpperCase(),
+            name: gameData.game.teacher_id || "PROFESSOR",
+            game_type: gameData.game.game_type?.replace("_", " ").toUpperCase(),
           });
         }
       } catch (err: any) {
         console.error("❌ Join Lobby Error:", err.message);
+        Swal.fire("Error", "Failed to join lobby. Please try again.", "error");
         setConnecting(false);
       }
     };
@@ -92,6 +103,7 @@ export default function WaitingRoomPage() {
         .from("players")
         .select("name, avatar, is_active")
         .eq("game_code", gameCode)
+        .eq("is_active", true)
         .order("joined_at", { ascending: true });
 
       if (!error) setPlayers(data || []);
@@ -142,9 +154,8 @@ export default function WaitingRoomPage() {
     };
 
     window.addEventListener("beforeunload", handleDisconnect);
-    window.addEventListener("pagehide", handleDisconnect); // for mobile/tab close
+    window.addEventListener("pagehide", handleDisconnect);
 
-    // ✅ Cleanup on unmount
     return () => {
       handleDisconnect();
       supabase.removeChannel(playerChannel);
@@ -223,7 +234,6 @@ export default function WaitingRoomPage() {
             {user.first_name?.toUpperCase()}
           </span>
         </div>
-       
       </header>
 
       {/* Game Info */}

@@ -52,6 +52,7 @@ export default function ChallengeModePage() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentQ = questions[currentIndex] || null;
+  const [volume, setVolume] = useState(0.6);
 
   // ✅ Load student info
   useEffect(() => {
@@ -129,19 +130,33 @@ export default function ChallengeModePage() {
     return () => clearInterval(i);
   }, [settings, user]);
 
-  // ✅ Background music
+
   useEffect(() => {
-    if (!musicUrl) return;
-    const audio = new Audio(musicUrl);
-    audio.loop = true;
-    audio.volume = 0.4;
-    audio.play().catch(() => {});
-    audioRef.current = audio;
-    return () => {
-      audio.pause();
-      audio.currentTime = 0;
-    };
-  }, [musicUrl]);
+  const savedVol = localStorage.getItem("quizVolume");
+  if (savedVol) setVolume(parseFloat(savedVol));
+}, []);
+
+ useEffect(() => {
+  if (!musicUrl) return;
+
+  const audio = new Audio(musicUrl);
+  audio.loop = true;
+  audio.volume = volume; // ← apply volume state
+  audioRef.current = audio;
+
+  audio.play().catch(() => {});
+
+  return () => {
+    audio.pause();
+    audio.currentTime = 0;
+  };
+}, [musicUrl, volume]);
+
+const handleVolumeChange = (value: number) => {
+  setVolume(value);
+  if (audioRef.current) audioRef.current.volume = value;
+  localStorage.setItem("quizVolume", value.toString());
+};
 
   const handleAnswer = (choice: "A" | "B" | "C" | "D") => {
     if (answered || !currentQ) return;
@@ -252,15 +267,37 @@ export default function ChallengeModePage() {
       {/* Header */}
       <header className="w-full bg-[#548E28] text-white px-4 py-3 shadow-md">
         <div className="flex items-center justify-between mb-1">
-          <div
-            className="flex items-center gap-2 cursor-pointer"
-            onClick={() => router.push("/student/play")}
-          >
-            <ArrowLeft className="w-6 h-6 hover:text-gray-300" />
-            <span className="font-semibold text-lg">Quiz Mode</span>
-          </div>
-          <span>⏱ {timer}s</span>
-        </div>
+
+  {/* Back Button */}
+  <div
+    className="flex items-center gap-2 cursor-pointer"
+    onClick={() => router.push("/student/play")}
+  >
+    <ArrowLeft className="w-6 h-6 hover:text-gray-300" />
+    <span className="font-semibold text-lg">Quiz Mode</span>
+  </div>
+
+  {/* RIGHT SIDE: Volume + Timer */}
+  <div className="flex items-center gap-4">
+    {/* Volume Slider */}
+    <div className="flex items-center gap-2">
+      <span className="text-sm">🔊</span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value={volume}
+        onChange={(e) => handleVolumeChange(Number(e.target.value))}
+        className="w-20 cursor-pointer"
+      />
+    </div>
+
+    {/* Timer */}
+    <span>⏱ {timer}s</span>
+  </div>
+</div>
+
 
         <div className="w-full h-2 bg-white/30 rounded-full overflow-hidden">
           <div

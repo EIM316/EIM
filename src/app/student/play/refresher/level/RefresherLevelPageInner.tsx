@@ -37,7 +37,7 @@ export default function RefresherLevelPage() {
   const [loading, setLoading] = useState(true);
 
 
-
+  const [volume, setVolume] = useState(0.6);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -87,24 +87,37 @@ export default function RefresherLevelPage() {
     fetchMusic();
   }, []);
 
-  // ✅ Play music in loop when loaded
   useEffect(() => {
-    if (!musicUrl) return;
+  const savedVol = localStorage.getItem("quizVolume");
+  if (savedVol) {
+    const v = parseFloat(savedVol);
+    setVolume(v);
+  }
+}, []);
 
-    const audio = new Audio(musicUrl);
-    audio.loop = true;
-    audio.volume = 0.6;
-    audioRef.current = audio;
 
-    // Start playback
-    audio.play().catch((err) => console.warn("Autoplay blocked:", err));
+  useEffect(() => {
+  if (!musicUrl) return;
 
-    // Cleanup when leaving or finishing
-    return () => {
-      audio.pause();
-      audio.currentTime = 0;
-    };
-  }, [musicUrl]);
+  const audio = new Audio(musicUrl);
+  audio.loop = true;
+  audio.volume = volume; // ✅ apply saved volume
+  audioRef.current = audio;
+
+  audio.play().catch((err) => console.warn("Autoplay blocked:", err));
+
+  return () => {
+    audio.pause();
+    audio.currentTime = 0;
+  };
+}, [musicUrl, volume]);
+
+const handleVolumeChange = (value: number) => {
+  setVolume(value);
+  if (audioRef.current) audioRef.current.volume = value;
+  localStorage.setItem("quizVolume", value.toString());
+};
+
 
   const currentQ = questions[currentIndex];
 
@@ -263,24 +276,42 @@ const saveProgress = async () => {
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-white text-black">
-      {/* Header */}
       <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md mb-6">
-        <div
-          className="flex items-center gap-2 cursor-pointer"
-          onClick={() => {
-            stopMusic();
-            router.push("/student/play/refresher");
-          }}
-        >
-          <ArrowLeft className="w-6 h-6 hover:text-gray-300" />
-          <span className="font-semibold text-lg">
-            Level {currentQ ? currentQ.level_id : ""}
-          </span>
-        </div>
-        <div className="text-sm">
-          {currentIndex + 1}/{questions.length}
-        </div>
-      </header>
+
+  <div
+    className="flex items-center gap-2 cursor-pointer"
+    onClick={() => {
+      stopMusic();
+      router.push("/student/play/refresher");
+    }}
+  >
+    <ArrowLeft className="w-6 h-6 hover:text-gray-300" />
+    <span className="font-semibold text-lg">
+      Level {currentQ ? currentQ.level_id : ""}
+    </span>
+  </div>
+
+  {/* RIGHT SIDE → Volume + Progress */}
+  <div className="flex items-center gap-4">
+    <div className="flex items-center gap-2">
+      <span className="text-sm">🔊</span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value={volume}
+        onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+        className="w-20 cursor-pointer"
+      />
+    </div>
+
+    <div className="text-sm">
+      {currentIndex + 1}/{questions.length}
+    </div>
+  </div>
+</header>
+
 
       {/* Question Section */}
       <main className="w-full max-w-xl px-4 text-center">

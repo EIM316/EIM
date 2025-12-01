@@ -27,6 +27,8 @@ export default function SchematicBuilderGame() {
   const [diagramLoaded, setDiagramLoaded] = useState(false);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [volume, setVolume] = useState(0.6);
+
 
   /* ---------- Load Auth ---------- */
   useEffect(() => {
@@ -38,6 +40,11 @@ export default function SchematicBuilderGame() {
     }
     setUser(JSON.parse(savedUser));
   }, [router]);
+
+  useEffect(() => {
+  const savedVol = localStorage.getItem("quizVolume");
+  if (savedVol) setVolume(parseFloat(savedVol));
+}, []);
 
   /* ---------- Show Instructions (One-Time) ---------- */
   useEffect(() => {
@@ -138,17 +145,21 @@ export default function SchematicBuilderGame() {
   }, []);
 
   useEffect(() => {
-    if (!musicUrl || !diagramLoaded) return;
-    const audio = new Audio(musicUrl);
-    audio.loop = true;
-    audio.volume = 0.4;
-    audioRef.current = audio;
-    audio.play().catch(() => {});
-    return () => {
-      audio.pause();
-      audio.currentTime = 0;
-    };
-  }, [musicUrl, diagramLoaded]);
+  if (!musicUrl || !diagramLoaded) return;
+
+  const audio = new Audio(musicUrl);
+  audio.loop = true;
+  audio.volume = volume; // apply saved volume
+  audioRef.current = audio;
+
+  audio.play().catch(() => {});
+
+  return () => {
+    audio.pause();
+    audio.currentTime = 0;
+  };
+}, [musicUrl, diagramLoaded, volume]);
+
 
   const stopMusic = () => {
     if (audioRef.current) {
@@ -156,6 +167,12 @@ export default function SchematicBuilderGame() {
       audioRef.current.currentTime = 0;
     }
   };
+
+  const handleVolumeChange = (value: number) => {
+  setVolume(value);
+  if (audioRef.current) audioRef.current.volume = value;
+  localStorage.setItem("quizVolume", value.toString());
+};
 
   /* ---------- Placement ---------- */
   const handlePlaceAnswer = (rectId: number) => {
@@ -251,19 +268,38 @@ export default function SchematicBuilderGame() {
     <div className="flex flex-col items-center min-h-screen bg-white relative">
       {/* Navbar */}
       <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md relative">
-        <button
-          onClick={() => {
-            stopMusic();
-            router.push("/student/play");
-          }}
-          className="flex items-center gap-2 hover:text-gray-300"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <h1 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-bold text-sm">
-          SCHEMATIC BUILDER
-        </h1>
-      </header>
+
+  {/* Back Button */}
+  <button
+    onClick={() => {
+      stopMusic();
+      router.push("/student/play");
+    }}
+    className="flex items-center gap-2 hover:text-gray-300"
+  >
+    <ArrowLeft className="w-6 h-6" />
+  </button>
+
+  {/* TITLE */}
+  <h1 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-bold text-sm">
+    SCHEMATIC BUILDER
+  </h1>
+
+  {/* VOLUME SLIDER */}
+  <div className="flex items-center gap-2">
+    <span className="text-lg">🔊</span>
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.01"
+      value={volume}
+      onChange={(e) => handleVolumeChange(Number(e.target.value))}
+      className="w-20 cursor-pointer"
+    />
+  </div>
+</header>
+
 
       {/* Diagram */}
       <main className="w-95 max-w-lg flex flex-col items-center">

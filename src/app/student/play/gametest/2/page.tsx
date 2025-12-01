@@ -71,6 +71,13 @@ useEffect(() => {
 }, [botScores]);
 
 const gameEndingRef = useRef(false);
+const [volume, setVolume] = useState(1);
+
+useEffect(() => {
+  const savedVol = localStorage.getItem("quizVolume");
+  if (savedVol) setVolume(parseFloat(savedVol));
+}, []);
+
 
 
   /* ---------- Load User + Setup ---------- */
@@ -97,6 +104,9 @@ const gameEndingRef = useRef(false);
     const adminId = u.admin_id || "ADMIN-0001";
     fetchGameData(adminId);
   }, [router]);
+
+
+
 
   /* ---------- Fetch Questions + Settings ---------- */
   const fetchGameData = async (admin_id: string) => {
@@ -321,8 +331,7 @@ const updateProgress = (playerCorrect: boolean) => {
     })
   );
 
-  console.log("🤖 Updated bot scores (real-time cumulative):", updatedBotScores);
-  console.log("🏗️ Players after update:", players);
+
 
   // ✅ Clear shake effect after animation
   setTimeout(() => {
@@ -338,6 +347,8 @@ const updateProgress = (playerCorrect: boolean) => {
       Swal.fire("⚠️ No questions found!", "Please contact your instructor.", "warning");
       return;
     }
+
+
 
     setPlayers((prev) => prev.map((p) => ({ ...p, height: 0 })));
     setTimeLeft(config.total_game_time);
@@ -514,38 +525,80 @@ const finishGame = async () => {
 
     return (
       <div className="flex flex-col items-center min-h-screen bg-white relative">
-        <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md mb-4">
-          <div className="flex items-center space-x-3 cursor-pointer">
-            <ArrowLeft
-              onClick={() => {
-                // ✅ Stop the game before logging out
-                setGameActive(false);
+<header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md mb-4">
+  {/* LEFT SIDE */}
+  <div className="flex items-center space-x-3">
+    <ArrowLeft
+      onClick={() => {
+        setGameActive(false);
+        if (questionTimer) clearInterval(questionTimer);
+        if (countdownTimer) clearInterval(countdownTimer);
 
-                if (questionTimer) clearInterval(questionTimer);
-                if (countdownTimer) clearInterval(countdownTimer);
+        if (bgAudio.current) {
+          bgAudio.current.pause();
+          bgAudio.current = null;
+        }
 
-                if (bgAudio.current) {
-                  bgAudio.current.pause();
-                  bgAudio.current = null;
-                }
+        router.push("/student/play");
+      }}
+      className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"
+    />
 
-                
-                router.push("/student/play");
-              }}
-              className="w-6 h-6 text-white cursor-pointer hover:text-gray-300"
-            />
-            <Image
-              src={user.avatar || "/student-avatar.png"}
-              alt="Profile"
-              width={40}
-              height={40}
-              className="rounded-full border-2 border-white"
-            />
-            <span className="font-semibold text-lg">{user.first_name?.toUpperCase()}</span>
-          </div>
+    <Image
+      src={user.avatar || "/student-avatar.png"}
+      alt="Profile"
+      width={40}
+      height={40}
+      className="rounded-full border-2 border-white"
+    />
 
-          
-        </header>
+    <span className="font-semibold text-lg">
+      {user.first_name?.toUpperCase()}
+    </span>
+  </div>
+
+  {/* RIGHT SIDE — Volume Controls */}
+  <div className="flex items-center space-x-2">
+    {musicOn ? (
+      <Volume2
+        className="w-6 h-6 cursor-pointer"
+        onClick={() => {
+          setMusicOn(false);
+          if (bgAudio.current) bgAudio.current.pause();
+          localStorage.setItem("quizVolume", "0");
+        }}
+      />
+    ) : (
+      <VolumeX
+        className="w-6 h-6 cursor-pointer"
+        onClick={() => {
+          setMusicOn(true);
+          if (bgAudio.current) {
+            bgAudio.current.volume = volume;
+            bgAudio.current.play();
+          }
+        }}
+      />
+    )}
+
+    {/* Slider */}
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.01"
+      value={volume}
+      onChange={(e) => {
+        const v = parseFloat(e.target.value);
+        setVolume(v);
+        localStorage.setItem("quizVolume", v.toString());
+        if (bgAudio.current) bgAudio.current.volume = v;
+      }}
+      className="w-24 accent-white cursor-pointer"
+    />
+  </div>
+</header>
+
 
         <main className="flex flex-col items-center w-full max-w-4xl">
           <h2 className="text-xl font-bold text-[#7b2020] mb-2">⚡ Phase Rush</h2>
@@ -559,6 +612,7 @@ const finishGame = async () => {
               minHeight: "400px",
             }}
           >
+            
             {players.map((p, i) => {
               const effortScale = p.height > 6 ? 1.15 : 1;
               const translateY = Math.min(p.height * 1, 336); // ✅ adjust per block to make character sit right on top

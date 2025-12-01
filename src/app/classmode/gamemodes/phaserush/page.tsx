@@ -57,8 +57,14 @@ export default function PhaseRush() {
   const bgAudio = useRef<HTMLAudioElement | null>(null);
   const questionInterval = useRef<NodeJS.Timeout | null>(null);
   const timerInterval = useRef<NodeJS.Timeout | null>(null);
-  const MAX_PROGRESS = 130; // 🚧 players cannot move past this value
+  const MAX_PROGRESS = 130; 
+  const [volume, setVolume] = useState(0.3);
 
+
+  useEffect(() => {
+  const savedVol = localStorage.getItem("phaseRushVolume");
+  if (savedVol) setVolume(parseFloat(savedVol));
+}, []);
 
   /* ---------- Load Player & Fetch Settings ---------- */
   useEffect(() => {
@@ -340,10 +346,9 @@ useEffect(() => {
     if (!loading && questions.length > 0 && user && settings && !gameActive) startGame();
   }, [loading, questions, user, settings]);
 
-  const startGame = async () => {
+ const startGame = async () => {
   setGameActive(true);
 
-  // ✅ Reset progress and broadcast start
   await supabase
     .from("game_events")
     .update({ progress: 0, score: 0 })
@@ -357,16 +362,14 @@ useEffect(() => {
     settings: JSON.stringify(settings),
   });
 
-  // ✅ Handle music
   try {
     const chosenTheme = settings?.musicTheme || "theme1";
     const themePath = `/resources/music/${chosenTheme}.mp3`;
 
-    // If there is no existing bgAudio or it's paused, play the default
     if (!bgAudio.current || bgAudio.current.paused) {
       bgAudio.current = new Audio(themePath);
       bgAudio.current.loop = true;
-      bgAudio.current.volume = 0.3;
+      bgAudio.current.volume = volume; // ← Use volume state
 
       const playAttempt = bgAudio.current.play();
 
@@ -390,11 +393,10 @@ useEffect(() => {
     }
   } catch (err) {
     console.error("❌ Error playing background music:", err);
-    // fallback to default theme1 if no audio at all
     try {
       bgAudio.current = new Audio("/resources/music/theme1.mp3");
       bgAudio.current.loop = true;
-      bgAudio.current.volume = 0.3;
+      bgAudio.current.volume = volume; // ← Use volume state
       await bgAudio.current.play();
       console.log("🎶 Fallback music (Theme 1) started successfully.");
     } catch (e) {
@@ -402,7 +404,6 @@ useEffect(() => {
     }
   }
 
-  // ✅ Start question & timer intervals
   questionInterval.current = setInterval(nextQuestion, 12000);
 
   timerInterval.current = setInterval(() => {
@@ -418,7 +419,12 @@ useEffect(() => {
   }, 1000);
 };
 
-
+// Add this handler function
+const handleVolumeChange = (value: number) => {
+  setVolume(value);
+  if (bgAudio.current) bgAudio.current.volume = value;
+  localStorage.setItem("phaseRushVolume", value.toString());
+};
 
   const nextQuestion = () => {
     setCanAnswer(true);
@@ -644,21 +650,34 @@ useEffect(() => {
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-gradient-to-b from-gray-100 to-gray-300">
-      {/* Header */}
-      <header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md">
-        <div className="flex items-center space-x-3">
-          <Image
-            src={user?.avatar || "/resources/avatars/student1.png"}
-            alt="Profile"
-            width={40}
-            height={40}
-            className="rounded-full border-2 border-white"
-          />
-          <span className="font-semibold text-lg">{user?.first_name?.toUpperCase()}</span>
-        </div>
-        
-      
-      </header>
+
+<header className="w-full bg-[#7b2020] text-white flex items-center justify-between px-4 py-3 shadow-md">
+  <div className="flex items-center space-x-3">
+    <Image
+      src={user?.avatar || "/resources/avatars/student1.png"}
+      alt="Profile"
+      width={40}
+      height={40}
+      className="rounded-full border-2 border-white"
+    />
+    <span className="font-semibold text-lg">{user?.first_name?.toUpperCase()}</span>
+  </div>
+  
+  {/* Volume Slider */}
+  <div className="flex items-center gap-2">
+    <span className="text-sm">🔊</span>
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.01"
+      value={volume}
+      onChange={(e) => handleVolumeChange(Number(e.target.value))}
+      className="w-20 cursor-pointer"
+      title="Adjust volume"
+    />
+  </div>
+</header>
 
       {/* Main */}
       <main className="flex flex-col items-center w-full max-w-5xl mt-4">
