@@ -84,9 +84,27 @@ export default function PlayPage() {
 
   const handleDownloadManual = async () => {
     try {
+      setShowManualOptions(false);
+      
+      // Show loading indicator
+      Swal.fire({
+        title: "Preparing download...",
+        text: "Please wait",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
       // Check if running on Android app
       if (typeof window !== "undefined" && window.Android?.saveBase64ToDownloads) {
-        const response = await fetch(pdfDirectUrl);
+        const response = await fetch(pdfDirectUrl, {
+          mode: 'cors',
+          credentials: 'omit'
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch PDF');
+        
         const blob = await response.blob();
         const reader = new FileReader();
         
@@ -102,32 +120,76 @@ export default function PlayPage() {
             });
           }
         };
+        
+        reader.onerror = () => {
+          throw new Error('Failed to read file');
+        };
+        
         reader.readAsDataURL(blob);
       } else {
-        // Regular browser download
-        const link = document.createElement("a");
-        link.href = pdfDirectUrl;
-        link.download = "Game_Manual.pdf";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        Swal.fire({
-          icon: "success",
-          title: "Downloading...",
-          text: "User manual is being downloaded",
-          confirmButtonColor: "#7b2020",
-          timer: 2000,
-        });
+        // For web browsers - use proxy approach or direct download
+        try {
+          // Try direct download first
+          const response = await fetch('/api/download-pdf', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: pdfDirectUrl
+            })
+          });
+
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Game_Manual.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            Swal.fire({
+              icon: "success",
+              title: "Downloading...",
+              text: "User manual is being downloaded",
+              confirmButtonColor: "#7b2020",
+              timer: 2000,
+            });
+          } else {
+            // Fallback: open in new tab
+            window.open(pdfUrl, '_blank');
+            Swal.fire({
+              icon: "info",
+              title: "Opening Manual",
+              text: "Manual opened in a new tab",
+              confirmButtonColor: "#7b2020",
+              timer: 2000,
+            });
+          }
+        } catch (fetchError) {
+          // Final fallback: open in new tab
+          window.open(pdfUrl, '_blank');
+          Swal.fire({
+            icon: "info",
+            title: "Opening Manual",
+            text: "Manual opened in a new tab",
+            confirmButtonColor: "#7b2020",
+            timer: 2000,
+          });
+        }
       }
-      setShowManualOptions(false);
     } catch (error) {
       console.error("Download error:", error);
       Swal.fire({
         icon: "error",
         title: "Download Failed",
-        text: "Could not download the manual. Please try again.",
+        text: "Could not download the manual. Opening in new tab instead.",
         confirmButtonColor: "#7b2020",
+      }).then(() => {
+        window.open(pdfUrl, '_blank');
       });
     }
   };
@@ -340,7 +402,7 @@ export default function PlayPage() {
                 onClick={handleViewManual}
                 className="w-full bg-[#7b2020] hover:bg-[#5a1515] text-white px-6 py-3 rounded-md transition-all flex items-center justify-center gap-3"
               >
-                <span className="text-2xl">👁️</span>
+                <span className="text-2xl"></span>
                 <span className="font-medium">View Manual</span>
               </button>
 
@@ -348,7 +410,7 @@ export default function PlayPage() {
                 onClick={handleDownloadManual}
                 className="w-full bg-[#548E28] hover:bg-[#3e6a20] text-white px-6 py-3 rounded-md transition-all flex items-center justify-center gap-3"
               >
-                <span className="text-2xl">📥</span>
+                <span className="text-2xl"></span>
                 <span className="font-medium">Download Manual</span>
               </button>
             </div>
@@ -375,7 +437,7 @@ export default function PlayPage() {
                 onClick={handleDownloadManual}
                 className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-md text-sm transition"
               >
-                📥 Download
+                 Download
               </button>
             </div>
 
